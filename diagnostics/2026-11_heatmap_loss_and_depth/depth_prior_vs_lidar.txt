@@ -1,0 +1,22 @@
+[OPV2VDataset] scanning /mnt/scratch2/users/2641309/datasets/OPV2V/DATA_train/train_chunks/train ...
+[OPV2VDataset] depth_source=lidar: filtered 6374 -> 1063 frames with .pcd present
+[OPV2VDataset] 1063 cooperative frames found.
+[OPV2VDataset] scanning /mnt/scratch2/users/2641309/datasets/OPV2V/DATA_train/train_chunks/train ...
+[OPV2VDataset] 6374 cooperative frames found.
+frames=12  pixels with both prior and LiDAR=34562  prior index range 0..63 (current depth_K=128)
+decoded as training does now (K=128, 4-90 m): median prior/LiDAR=2.640  median err=+10.56 m  MAE=12.27 m  |err|<1m: 0.005
+decoded with precompute encoding (K=64, 4-50 m): median prior/LiDAR=2.829  median err=+12.18 m  MAE=13.52 m  |err|<1m: 0.005
+  LiDAR  4-10 m (n=23004): training-decoded median err +10.50 m   precompute-encoding median err +11.52 m
+  LiDAR 10-20 m (n= 8358): training-decoded median err +13.30 m   precompute-encoding median err +15.20 m
+  LiDAR 20-30 m (n= 1761): training-decoded median err +10.69 m   precompute-encoding median err +13.26 m
+  LiDAR 30-50 m (n=  823): training-decoded median err -2.83 m   precompute-encoding median err -0.62 m
+LiDAR pixels beyond 50 m: 0.018 of overlap (prior labels none of these)
+[OPV2VDataset] scanning /mnt/scratch2/users/2641309/datasets/OPV2V/DATA_train/train_chunks/train ...
+[OPV2VDataset] depth_source=lidar: filtered 6374 -> 1063 frames with .pcd present
+[OPV2VDataset] 1063 cooperative frames found.
+[OPV2VDataset] scanning /mnt/scratch2/users/2641309/datasets/OPV2V/DATA_train/train_chunks/train ...
+[OPV2VDataset] 6374 cooperative frames found.
+
+GT-box check: 497 (vehicle, camera) pairs in view, 4-50 m
+  LiDAR label                         : n= 463  median(label - box distance)=-2.00 m  within 3 m: 0.635  median ratio=0.87
+  ZoeDepth prior (its own encoding)   : n= 413  median(label - box distance)=+13.14 m  within 3 m: 0.099  median ratio=1.68

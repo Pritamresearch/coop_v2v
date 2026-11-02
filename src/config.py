@@ -1,0 +1,142 @@
+"""
+Central configuration — Kelvin2 / OPV2V production version.
+
+Every experiment is fully described by this dataclass and reproduced
+from results/<exp_name>/config.json.
+"""
+from __future__ import annotations
+import json
+import os
+from dataclasses import dataclass, asdict
+
+# ------------------------------------------------------------------ #
+# Kelvin2 paths — real OPV2V data                                     #
+# ------------------------------------------------------------------ #
+_SCRATCH = "/mnt/scratch2/users/2641309"
+_OPV2V   = f"{_SCRATCH}/datasets/OPV2V"
+
+TRAIN_DIR    = f"{_OPV2V}/DATA_train/train_chunks/train"
+VAL_DIR      = f"{_OPV2V}/DATA_validate/validate_chunks/validate"
+TEST_DIR     = f"{_OPV2V}/DATA_test/test_chunks/test"
+RESULTS_ROOT = f"{_SCRATCH}/projects/coop_v2v/results"
+
+
+@dataclass
+class Config:
+    # ---- identity ----
+    exp_name: str = "ours_full"
+    seed:     int = 0
+    device:   str = "cuda"
+    resume:   bool = False      # set True to resume from last.pth
+
+    # ---- ABLATION SWITCHES (change ONE to run an ablation) ----
+    k:                int  = 2
+    use_utility_gate: bool = True
+    utility_type:     str  = "depth_aware"   # depth_aware | confidence_only | magnitude_only | learned_fue
+    receiver_centric: bool = True
+    alpha:            float = 4.0
+    joint_train:      bool = True
+    use_encoder:      bool = True
+    no_fusion:        bool = False
+    dense_transmit:   bool = False
+    selection_relax:  str  = "true_topk"     # true_topk | sigmoid
+
+    # ---- backbone ----
+    backbone:       str  = "lss"
+    lss_encoder:    str  = "efficientnet"    # efficientnet | resnet50 | small
+    lss_pretrained: bool = True
+
+    # ---- LSS geometry: OPV2V native resolution 600x800, downsample=8 → fH=75,fW=100 ----
+    lss_img_H:    int   = 384
+    lss_img_W:    int   = 512
+    lss_downsample: int = 8
+    lss_n_cams:   int   = 4
+    lss_d_min:    float = 4.0
+    lss_d_max:    float = 90.0
+
+    # ---- BEV grid: 100m x 100m @ 0.5m/cell = 200x200 ----
+    bev_x_min: float = -51.2
+    bev_x_max: float =  51.2
+    bev_y_min: float = -51.2
+    bev_y_max: float =  51.2
+    cell_m:    float =  0.4
+
+    # ---- model dims ----
+    feat_C:  int = 256
+    depth_K: int = 128
+    grid_H:  int = 256
+    grid_W:  int = 256
+
+    # ---- detection head ----
+    predict_yaw: bool = True
+    predict_z:   bool = True
+
+    # ---- training ----
+    epochs:        int   = 60
+    warmup_epochs: int   = 40
+    lr:            float = 1e-4
+    weight_decay:  float = 1e-2
+    grad_clip:     float = 1.0
+    batch_size:    int   = 1
+    grad_accum_steps: int = 4       # simulates batch_size=4 (matches TUMTraf V2X setup)
+    num_workers:   int   = 4
+    val_every:     int   = 2       # validate every N epochs (saves ~50% of val time)
+    lambda_bw:     float = 1e-4
+    gamma_depth:   float = 1.0
+    depth_source:  str   = "zoedepth"  # "zoedepth" or "lidar" (oracle experiment)
+    gumbel_T0:     float = 5.0
+    gumbel_T1:     float = 0.5
+
+    # ---- inference ----
+    budget_frac: float = 0.4
+    tau:         float = 0.0
+
+    # ---- byte accounting (N5: honest — utility map included) ----
+    b_idx:  int = 2
+    b_util: int = 1
+
+    @property
+    def b_feat(self) -> int:
+        return self.feat_C // 2      # 4-bit packing: feat_C=256 → 128 bytes
+
+    @property
+    def per_cell_bytes(self) -> int:
+        return self.b_idx + self.b_feat + self.b_util   # 131 bytes at feat_C=256
+
+    # ---- dataset: always OPV2V real data ----
+    dataset:     str  = "opv2v"
+    train_dir:   str  = TRAIN_DIR
+    val_dir:     str  = VAL_DIR
+    test_dir:    str  = TEST_DIR
+    max_agents:  int  = 5
+    use_gt_pose: bool = True   # True = true_ego_pos; False = predicted_ego_pos (GPS noisy)
+    augment:     bool = True   # BEV rotation augmentation (train only; auto-disabled for val/test)
+
+    # ---- output root ----
+    root: str = RESULTS_ROOT
+
+    # ----------------------------------------------------------------
+    def save(self) -> str:
+        d = f"{self.root}/{self.exp_name}"
+        os.makedirs(d, exist_ok=True)
+        path = f"{d}/config.json"
+        with open(path, "w") as f:
+            json.dump(asdict(self), f, indent=2)
+        return path
+
+    @classmethod
+    def load(cls, path: str) -> "Config":
+        with open(path) as f:
+            return cls(**json.load(f))
+
+    def validate(self) -> None:
+        assert self.feat_C % 2 == 0, "feat_C must be even for 4-bit packing"
+        assert self.utility_type in {
+            "depth_aware", "confidence_only", "magnitude_only", "learned_fue"
+        }
+        assert self.selection_relax in {"true_topk", "sigmoid"}
+        assert self.backbone in {"lss"}        # standin removed; always use real LSS
+        assert self.lss_encoder in {"efficientnet", "resnet50", "small"}
+        assert self.k >= 1
+        assert 0.0 <= self.budget_frac <= 1.0
+        assert self.dataset == "opv2v", "Only OPV2V real data is supported"

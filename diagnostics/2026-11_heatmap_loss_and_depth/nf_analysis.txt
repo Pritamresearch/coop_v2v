@@ -1,0 +1,67 @@
+== /mnt/scratch2/users/2641309/tmp_claude_diag/nf_cache.pt  epoch=41  frames=52
+
+[val] real GT stats per frame (mean): mask cells=20.7  gt==1 cells=20.7  gt>0.01=2317  gt>0.1=1193  gt>0.5=360  total=65536
+  neg:pos ratio  vs gt==1 cells: 3161:1   vs gt>0.01 cells: 27:1
+  heat at GT centres: mean=0.595 median=0.633   neg cells q50/q90/q99=[0.336 0.67  0.817]
+  GT-centre percentile among neg cells: median=0.8086; frac above neg-q99.9: 0.029
+  => expected #neg cells outscoring a typical GT centre: 12544 per frame
+  GT centre is itself a 3x3 local max: 0.059
+  pos-vs-neg cell AUC: 0.8068
+
+[val] heatmap loss on the real outputs (pos term, neg term) and |dL/dlogit| summed:
+  current  : L_pos=0.716 L_neg=0.1673  grad_pos=0.741 grad_neg=0.2199  neg share=0.229
+  CenterNet: L_pos=0.179 L_neg=792.75   grad_pos=0.185 grad_neg=1039.79  neg share=1.000
+
+[val] real decode() threshold sweep (AP is global, greedy-by-score matching)
+  th=0.05 peaks/fr=  88.0 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.20 peaks/fr=  88.0 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.40 peaks/fr=  88.0 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.50 peaks/fr=  88.0 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.60 peaks/fr=  88.0 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.70 peaks/fr=  87.9 AP30=0.0324 AP50=0.0022 AP70=0.0001 rec50=0.057 prec50=0.013
+  th=0.80 peaks/fr=  51.2 AP30=0.0302 AP50=0.0020 AP70=0.0001 rec50=0.045 prec50=0.018
+  th=0.90 peaks/fr=   6.5 AP30=0.0178 AP50=0.0012 AP70=0.0001 rec50=0.018 prec50=0.058
+
+[val] decomposition at score_thresh=0.2  (n_gt=829)
+  GT with a decoded peak within 0.8m: 0.097
+  GT with a decoded peak within 2.0m: 0.317
+  centre-distance AP@1.0m (heatmap-only quality): 0.0243
+  centre-distance AP@2.0m (heatmap-only quality): 0.0577
+  AP50 with pred        : 0.0022
+  AP50 with gt_yaw      : 0.0079
+  AP50 with gt_size     : 0.0022
+  AP50 with gt_size+yaw : 0.0079
+  AP50 with gt_centre   : 0.0464
+
+[train] real GT stats per frame (mean): mask cells=10.2  gt==1 cells=10.2  gt>0.01=1153  gt>0.1=585  gt>0.5=176  total=65536
+  neg:pos ratio  vs gt==1 cells: 6393:1   vs gt>0.01 cells: 56:1
+  heat at GT centres: mean=0.754 median=0.766   neg cells q50/q90/q99=[0.253 0.664 0.823]
+  GT-centre percentile among neg cells: median=0.9631; frac above neg-q99.9: 0.049
+  => expected #neg cells outscoring a typical GT centre: 2418 per frame
+  GT centre is itself a 3x3 local max: 0.049
+  pos-vs-neg cell AUC: 0.9476
+
+[train] heatmap loss on the real outputs (pos term, neg term) and |dL/dlogit| summed:
+  current  : L_pos=0.109 L_neg=0.1449  grad_pos=0.219 grad_neg=0.1845  neg share=0.457
+  CenterNet: L_pos=0.027 L_neg=1071.76   grad_pos=0.055 grad_neg=1377.02  neg share=1.000
+
+[train] real decode() threshold sweep (AP is global, greedy-by-score matching)
+  th=0.05 peaks/fr=  88.5 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.20 peaks/fr=  88.5 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.40 peaks/fr=  88.5 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.50 peaks/fr=  88.5 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.60 peaks/fr=  88.5 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.70 peaks/fr=  87.3 AP30=0.0680 AP50=0.0075 AP70=0.0001 rec50=0.154 prec50=0.018
+  th=0.80 peaks/fr=  49.4 AP30=0.0603 AP50=0.0068 AP70=0.0001 rec50=0.122 prec50=0.025
+  th=0.90 peaks/fr=   4.4 AP30=0.0248 AP50=0.0027 AP70=0.0000 rec50=0.008 prec50=0.019
+
+[train] decomposition at score_thresh=0.2  (n_gt=123)
+  GT with a decoded peak within 0.8m: 0.187
+  GT with a decoded peak within 2.0m: 0.699
+  centre-distance AP@1.0m (heatmap-only quality): 0.0335
+  centre-distance AP@2.0m (heatmap-only quality): 0.1105
+  AP50 with pred        : 0.0075
+  AP50 with gt_yaw      : 0.0179
+  AP50 with gt_size     : 0.0090
+  AP50 with gt_size+yaw : 0.0194
+  AP50 with gt_centre   : 0.1408

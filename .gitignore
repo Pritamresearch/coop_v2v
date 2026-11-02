@@ -1,0 +1,12 @@
+# data products, checkpoints, logs (multi-GB; kept on the cluster)
+results/
+logs/
+*.pth
+*.pt
+*.log
+# python
+__pycache__/
+*.pyc
+# backups of edited source files
+*.bak*
+*.current_*

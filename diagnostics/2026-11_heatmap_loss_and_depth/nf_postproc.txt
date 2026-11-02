@@ -1,0 +1,17 @@
+val frames=40   (baseline = blur 0, kernel 3, nms 2.0)
+  blur_sigma=0 peak_kernel=3 nms=2.0: peaks/fr= 88.0 AP30=0.0324 AP50=0.0022 rec50=0.057
+  blur_sigma=0 peak_kernel=3 nms=4.0: peaks/fr= 40.0 AP30=0.0257 AP50=0.0020 rec50=0.033
+  blur_sigma=0 peak_kernel=7 nms=2.0: peaks/fr=180.3 AP30=0.0299 AP50=0.0022 rec50=0.060
+  blur_sigma=0 peak_kernel=7 nms=4.0: peaks/fr= 98.6 AP30=0.0272 AP50=0.0022 rec50=0.042
+  blur_sigma=1 peak_kernel=3 nms=2.0: peaks/fr=165.8 AP30=0.0387 AP50=0.0028 rec50=0.066
+  blur_sigma=1 peak_kernel=3 nms=4.0: peaks/fr= 87.8 AP30=0.0355 AP50=0.0023 rec50=0.041
+  blur_sigma=1 peak_kernel=7 nms=2.0: peaks/fr=192.6 AP30=0.0394 AP50=0.0027 rec50=0.057
+  blur_sigma=1 peak_kernel=7 nms=4.0: peaks/fr=122.5 AP30=0.0347 AP50=0.0021 rec50=0.036
+  blur_sigma=2 peak_kernel=3 nms=2.0: peaks/fr=168.3 AP30=0.0393 AP50=0.0045 rec50=0.049
+  blur_sigma=2 peak_kernel=3 nms=4.0: peaks/fr=130.9 AP30=0.0362 AP50=0.0044 rec50=0.039
+  blur_sigma=2 peak_kernel=7 nms=2.0: peaks/fr=141.2 AP30=0.0383 AP50=0.0044 rec50=0.045
+  blur_sigma=2 peak_kernel=7 nms=4.0: peaks/fr=119.1 AP30=0.0361 AP50=0.0045 rec50=0.039
+  blur_sigma=3 peak_kernel=3 nms=2.0: peaks/fr= 87.8 AP30=0.0162 AP50=0.0007 rec50=0.019
+  blur_sigma=3 peak_kernel=3 nms=4.0: peaks/fr= 81.8 AP30=0.0153 AP50=0.0006 rec50=0.017
+  blur_sigma=3 peak_kernel=7 nms=2.0: peaks/fr= 77.8 AP30=0.0146 AP50=0.0006 rec50=0.017
+  blur_sigma=3 peak_kernel=7 nms=4.0: peaks/fr= 74.4 AP30=0.0140 AP50=0.0005 rec50=0.016

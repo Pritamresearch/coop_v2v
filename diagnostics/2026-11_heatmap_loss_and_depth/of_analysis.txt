@@ -1,0 +1,29 @@
+== /mnt/scratch2/users/2641309/tmp_claude_diag/of_cache.pt  epoch=36  frames=24
+
+[val] real GT stats per frame (mean): mask cells=20.8  gt==1 cells=20.8  gt>0.01=2319  gt>0.1=1194  gt>0.5=360  total=65536
+  neg:pos ratio  vs gt==1 cells: 3145:1   vs gt>0.01 cells: 27:1
+  heat at GT centres: mean=0.606 median=0.631   neg cells q50/q90/q99=[0.312 0.655 0.806]
+  GT-centre percentile among neg cells: median=0.8437; frac above neg-q99.9: 0.016
+  => expected #neg cells outscoring a typical GT centre: 10242 per frame
+  GT centre is itself a 3x3 local max: 0.048
+  pos-vs-neg cell AUC: 0.8232
+
+[val] heatmap loss on the real outputs (pos term, neg term) and |dL/dlogit| summed:
+  current  : L_pos=0.518 L_neg=0.1524  grad_pos=0.708 grad_neg=0.2036  neg share=0.223
+  CenterNet: L_pos=0.130 L_neg=677.50   grad_pos=0.177 grad_neg=906.83  neg share=1.000
+
+[val] real decode() threshold sweep (AP is global, greedy-by-score matching)
+  th=0.05 peaks/fr=  82.2 AP30=0.0225 AP50=0.0048 AP70=0.0001 rec50=0.056 prec50=0.014
+  th=0.80 peaks/fr=  51.3 AP30=0.0205 AP50=0.0046 AP70=0.0001 rec50=0.044 prec50=0.018
+  th=0.90 peaks/fr=   2.8 AP30=0.0119 AP50=0.0040 AP70=0.0001 rec50=0.016 prec50=0.121
+
+[val] decomposition at score_thresh=0.2  (n_gt=500)
+  GT with a decoded peak within 0.8m: 0.092
+  GT with a decoded peak within 2.0m: 0.306
+  centre-distance AP@1.0m (heatmap-only quality): 0.0103
+  centre-distance AP@2.0m (heatmap-only quality): 0.0462
+  AP50 with pred        : 0.0048
+  AP50 with gt_yaw      : 0.0098
+  AP50 with gt_size     : 0.0056
+  AP50 with gt_size+yaw : 0.0094
+  AP50 with gt_centre   : 0.0704

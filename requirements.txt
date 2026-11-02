@@ -1,0 +1,11 @@
+# Core (install via conda/pip on Kelvin2)
+# torch + torchvision: install separately with CUDA:
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+numpy>=1.24
+opencv-python-headless>=4.7
+matplotlib>=3.7
+pandas>=2.0
+shapely>=2.0
+pyyaml>=6.0
+# Optional but recommended (fast LiDAR PCD loading):
+# open3d>=0.17

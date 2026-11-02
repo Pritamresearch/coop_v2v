@@ -1,0 +1,47 @@
+PROPOSED -- NOT APPLIED. Requires retraining; apply only for a NEW run (not to the live 10488212/10488213 jobs).
+
+--- a/src/loss/detection.py
++++ b/src/loss/detection.py
+@@ def gaussian_focal_loss(pred: torch.Tensor, gt: torch.Tensor,
+-    n_pos = pos.sum().clamp(min=1.0)
+-    n_neg = neg.sum().clamp(min=1.0)
+-    return pos_loss.sum() / n_pos + neg_loss.sum() / n_neg
++    # Standard CenterNet normalisation: BOTH terms divided by n_pos. Dividing the
++    # negative term by n_neg (~65k cells) makes a flat p~0.63 map loss-optimal and
++    # removes the pressure to suppress false-positive peaks.
++    n_pos = pos.sum().clamp(min=1.0)
++    return (pos_loss.sum() + neg_loss.sum()) / n_pos
+@@ def detection_loss(out: dict, gt: dict,
+-    L_hm = gaussian_focal_loss(out["heat"], gt["heat"], pos_weight=4.0)
++    L_hm = gaussian_focal_loss(out["heat"], gt["heat"])
+
+--- a/src/data/bev_augment.py
++++ b/src/data/bev_augment.py
+@@ def gaussian_radius_cells(w_m: float, l_m: float, cell_m: float,
+-                           min_overlap: float = 0.7) -> float:
++                           min_overlap: float = 0.1) -> float:          # CenterPoint value
+@@
+-    return max(1.0, radius)   # at least 1 cell
++    return max(2.0, radius)   # CenterPoint min_radius=2
+@@ def draw_gaussian_sized(heat: np.ndarray, row: float, col: float,
+-    sigma = r / 3.0
++    sigma = (2 * int(r) + 1) / 6.0   # CenterNet/CenterPoint: diameter / 6
+
+--- a/src/data/opv2v.py
++++ b/src/data/opv2v.py
+@@ def _build_bev_gt(
+-        # draw heatmap Gaussian (sigma = 2 cells)
+-        g = _gaussian_2d(H, W, row_f, col_f, sigma=2.0)
+-        np.maximum(heat, g, out=heat)
+-        heat[row, col] = 1.0  # ensure exact 1.0 at centre for focal loss
++        # same size-adaptive target as the training (augmented) path
++        from src.data.bev_augment import draw_gaussian_sized
++        draw_gaussian_sized(heat, row_f, col_f, w_m, l_m, cell)
+
+--- a/src/metrics.py
++++ b/src/metrics.py
+@@ def evaluate(model, loader, cfg, hard: bool = True,
+-        boxes, scores = decode(out, cfg, score_thresh=0.20, topk=200)
++        # CenterNet-normalised heads output low absolute scores (background ~0.01);
++        # a 0.20 cut would hide early-training detections. AP is ranking-based anyway.
++        boxes, scores = decode(out, cfg, score_thresh=0.05, topk=200)
