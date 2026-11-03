@@ -13,6 +13,7 @@ FID=$1; NAME=$2; OUT=$3; SUF=$4; EXTRA=${5:-}
 SRC="https://ucla.app.box.com/index.php?rm=box_download_shared_file&shared_name=vxetzti0z0dv97yeh1jgxdprxxqucs2a&file_id=$FID"
 EXPECTED=$(curl -sSL -A "Mozilla/5.0" -r 0-0 -D - -o /dev/null "$SRC" | tr -d '\r' | awk -F/ 'tolower($0) ~ /^content-range/ {print $NF}' | tail -1)
 echo "$(date) $NAME expected size: $EXPECTED bytes"
+if [ -z "$EXPECTED" ]; then echo "$(date) could not get the archive size from Box (transient?) -- not downloading; resubmit later"; exit 1; fi
 have() { stat -c %s "$A/$NAME" 2>/dev/null || echo 0; }
 if [ "$(have)" != "$EXPECTED" ]; then
   echo "$(date) downloading (resuming from $(have) bytes)"
