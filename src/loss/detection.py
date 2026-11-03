@@ -15,7 +15,7 @@ import torch.nn.functional as F
 
 def gaussian_focal_loss(pred: torch.Tensor, gt: torch.Tensor,
                         alpha: float = 2.0, beta: float = 4.0, eps: float = 1e-4,
-                        pos_weight: float = 1.0) -> torch.Tensor:
+                        pos_weight: float = 1.0, norm: str = "sepnorm") -> torch.Tensor:
     """
     CornerNet / CenterNet focal loss for a per-cell heatmap.
     pred, gt : (H, W)   both in [0, 1]
@@ -27,6 +27,11 @@ def gaussian_focal_loss(pred: torch.Tensor, gt: torch.Tensor,
     after the (1-gt)^beta down-weighting. A modest positive upweight
     (2-4x is standard in the literature) counteracts this without
     changing the loss's overall scale materially.
+
+    norm: "sepnorm" divides the negative term by n_neg (original runs);
+    "centernet" divides both terms by n_pos (standard CenterNet). With
+    sepnorm a flat ~0.6 heatmap is loss-optimal at this grid size (see
+    diagnostics/2026-11_heatmap_loss_and_depth).
     """
     pred = pred.float()   # force fp32: log() derivatives near the clamp
     gt = gt.float()       # boundaries overflow fp16 range under autocast
@@ -36,13 +41,16 @@ def gaussian_focal_loss(pred: torch.Tensor, gt: torch.Tensor,
     pos_loss = -((1.0 - pred) ** alpha) * torch.log(pred) * pos * pos_weight
     neg_loss = -((1.0 - gt) ** beta) * (pred ** alpha) * torch.log(1.0 - pred) * neg
     n_pos = pos.sum().clamp(min=1.0)
+    if norm == "centernet":
+        return (pos_loss.sum() + neg_loss.sum()) / n_pos
     n_neg = neg.sum().clamp(min=1.0)
     return pos_loss.sum() / n_pos + neg_loss.sum() / n_neg
 
 
 def detection_loss(out: dict, gt: dict,
                    w_off: float = 1.0, w_sz: float = 1.0,
-                   w_yaw: float = 1.0, w_zh: float = 0.5) -> tuple[torch.Tensor, dict]:
+                   w_yaw: float = 1.0, w_zh: float = 0.5,
+                   hm_norm: str = "sepnorm", hm_pos_weight: float = 4.0) -> tuple[torch.Tensor, dict]:
     """
     out: model outputs (heat, offset, size, yaw?, zh?)
     gt : dict with:
@@ -53,7 +61,7 @@ def detection_loss(out: dict, gt: dict,
         zh     : (2, H, W)      z_centre, height  (optional)
         mask   : (H, W)         1 at object centres, 0 elsewhere
     """
-    L_hm = gaussian_focal_loss(out["heat"], gt["heat"], pos_weight=4.0)
+    L_hm = gaussian_focal_loss(out["heat"], gt["heat"], pos_weight=hm_pos_weight, norm=hm_norm)
     mask = gt["mask"].bool()
     L_reg = out["heat"].sum() * 0.0                         # zero tensor sharing device/dtype
     parts = {"hm": L_hm.detach().float().item()}

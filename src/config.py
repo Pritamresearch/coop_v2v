@@ -83,9 +83,16 @@ class Config:
     val_every:     int   = 2       # validate every N epochs (saves ~50% of val time)
     lambda_bw:     float = 1e-4
     gamma_depth:   float = 1.0
-    depth_source:  str   = "zoedepth"  # "zoedepth" or "lidar" (oracle experiment)
+    depth_source:  str   = "zoedepth"  # "zoedepth" | "lidar" (labels from .pcd; train split only) | "none"
     gumbel_T0:     float = 5.0
     gumbel_T1:     float = 0.5
+
+    # ---- heatmap target / loss (defaults reproduce the original runs) ----
+    hm_norm:       str   = "sepnorm"   # "sepnorm": neg term / n_neg | "centernet": both terms / n_pos
+    hm_pos_weight: float = 4.0         # extra weight on the positive term
+    gauss_mode:    str   = "legacy"    # "legacy": train r>=1, sigma=r/3; val sigma=2 cells
+                                       # "centerpoint": train+val min_overlap=0.1, r>=2, sigma=(2r+1)/6
+    eval_score_thresh: float = 0.20    # decode() threshold used by evaluate()
 
     # ---- inference ----
     budget_frac: float = 0.4
@@ -140,3 +147,6 @@ class Config:
         assert self.k >= 1
         assert 0.0 <= self.budget_frac <= 1.0
         assert self.dataset == "opv2v", "Only OPV2V real data is supported"
+        assert self.depth_source in {"zoedepth", "lidar", "none"}
+        assert self.hm_norm in {"sepnorm", "centernet"}
+        assert self.gauss_mode in {"legacy", "centerpoint"}

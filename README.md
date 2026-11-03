@@ -9,7 +9,7 @@ predicts 3D boxes. Baselines (no fusion, dense fusion, Where2comm-style, JigsawC
 same code as presets.
 
 > **Status:** the pipeline trains end to end but detection AP is still near zero. See
-> [Known issues](#known-issues-2026-11-02) before launching long runs.
+> [Known issues](#known-issues-2026-11-03) before launching long runs.
 
 ---
 
@@ -50,6 +50,7 @@ same code as presets.
 | `score_thresh_sweep.py` | Re-decode a checkpoint at several score thresholds. |
 | `scripts/setup_env.sh` | Create the `coop_v2v` conda environment. |
 | `scripts/check_opv2v.py` | Data sanity check: run this first on a new machine or dataset copy. |
+| `scripts/opv2v_restore/` | Download OPV2V archives from the official UCLA Box share and extract only selected file types (see [Data](#2-data)). |
 
 ### Other folders
 
@@ -88,7 +89,21 @@ export PYTHONPATH=$PWD:$PYTHONPATH     # run everything from the repository root
 
 ### 2. Data
 
-Download OPV2V and point the paths at the top of `src/config.py` to it:
+Download OPV2V from the official UCLA Box share, https://ucla.app.box.com/v/UCLA-MobilityLab-OPV2V
+(the Google Drive link in older OpenCOOD docs no longer works). The OPV2V archives are `train-003.zip`,
+`validate-002.zip` and `test-012.zip`; `train-002.zip` and `test-001.zip` contain a different 2022 dataset.
+
+To fetch an archive on the cluster and extract only some file types into an existing copy (never overwriting):
+
+```bash
+# e.g. restore LiDAR for the train split, only into scenario folders that already exist locally
+sbatch -J restore_train scripts/opv2v_restore/fetch_and_extract.sh \
+    f_1621828681754 train-003.zip <OPV2V>/DATA_train/train_chunks .pcd --only-existing-dirs
+# Box file ids: train-003 f_1621828681754, validate-002 f_1621863671123, test-012 f_1621736219709
+```
+
+The script needs a Python with `requests` (`RESTORE_PY`) and keeps the full archives in `RESTORE_ARCHIVES`
+as a backup. Then point the paths at the top of `src/config.py` to the data:
 
 ```python
 _SCRATCH = "/mnt/scratch2/users/2641309"           # change for your machine
@@ -108,15 +123,15 @@ python scripts/check_opv2v.py
 
 ### 3. Depth labels
 
-Training supervises depth with `cfg.depth_source`:
+Training supervises depth with `cfg.depth_source` (validation and test never load depth labels):
 
-- `"zoedepth"` (default) reads `<frame>_camera{i}_depth_prior.npy`, produced once by
-  `sbatch precompute_depth.sh` (ZoeDepth `ZoeD_NK`).
-- `"lidar"` projects `<frame>.pcd` into the cameras instead; frames without a `.pcd` are skipped.
-
-⚠️ The existing `.npy` files are known to be wrong; see [Known issues](#known-issues-2026-11-02). If you
-regenerate them, the `--d_min/--d_max/--depth_K` flags **must** match `lss_d_min/lss_d_max/depth_K` in
-`src/config.py` (currently 4 / 90 / 128). The script's defaults (4 / 50 / 64) are stale.
+- `"lidar"` (**recommended**) projects each vehicle's `<frame>.pcd` into its cameras and keeps the nearest
+  return per feature cell. Training frames whose ego vehicle has no `.pcd` are skipped, so restore the
+  train LiDAR first (see above). The final model is still camera-only; LiDAR is only a training-time teacher.
+- `"zoedepth"` (the original default) reads `<frame>_camera{i}_depth_prior.npy` from `precompute_depth.sh`.
+  ⚠️ These labels are about 2–3× too far (see [Known issues](#known-issues-2026-11-03)) and are encoded for
+  64 bins over 4–50 m, not the current 128 bins over 4–90 m.
+- `"none"` disables depth labels.
 
 ---
 
@@ -132,10 +147,21 @@ regenerate them, the `--d_min/--d_max/--depth_K` flags **must** match `lss_d_min
 | `jigsawcomm_cam` | Top-1 per cell, magnitude utility, plain attention (JigsawComm on cameras) |
 | `ours_full` | Depth-aware utility + top-2 + utility gate + receiver-centric fusion (proposed method) |
 
-### Train a single preset (recommended)
+### Current recommended run
 
-This is how the current runs are launched. Copy `slurm/no_fusion_camfix.sh`, change the preset and
-`exp_name`, and submit with `sbatch`. The core of it is:
+`slurm/no_fusion_lidardepth.sh` trains `no_fusion` with LiDAR depth labels and the corrected heatmap loss.
+It resumes automatically from its own `last.pth`, so chain it past the 3-day SLURM limit:
+
+```bash
+j1=$(sbatch --parsable slurm/no_fusion_lidardepth.sh)
+j2=$(sbatch --parsable --dependency=afterany:$j1 slurm/no_fusion_lidardepth.sh)
+sbatch --dependency=afterany:$j2 slurm/no_fusion_lidardepth.sh
+```
+
+### Train a single preset
+
+Copy `slurm/no_fusion_lidardepth.sh` (or the older `slurm/no_fusion_camfix.sh`), change the preset,
+`exp_name` and settings, and submit with `sbatch`. The core of it is:
 
 ```bash
 python -u -c "
@@ -225,25 +251,33 @@ background); `n_peaks_mean` (detections per frame after NMS, versus ~10–20 rea
 | `bev_x/y_min/max`, `cell_m`, `grid_H/W` | ±51.2 m, 0.4 m, 256×256 | BEV detection range and resolution |
 | `lss_img_H/W`, `lss_d_min/max`, `depth_K` | 384×512, 4–90 m, 128 bins | Camera input size and depth discretisation |
 | `epochs`, `warmup_epochs`, `lr` | 60 (runs use 120), 40, 1e-4 | Schedule; the bandwidth penalty switches on after warm-up |
-| `gamma_depth`, `depth_source` | 1.0, `"zoedepth"` | Depth-supervision weight and label source |
+| `gamma_depth`, `depth_source` | 1.0, `"zoedepth"` (use `"lidar"`) | Depth-supervision weight and label source |
+| `hm_norm`, `hm_pos_weight` | `"sepnorm"`, 4.0 (use `"centernet"`, 1.0) | Heatmap focal-loss normalisation and positive weight |
+| `gauss_mode` | `"legacy"` (use `"centerpoint"`) | Heatmap target width; `centerpoint` uses the same target on train and val |
+| `eval_score_thresh` | 0.20 (use 0.05) | Detection score cut-off in `evaluate()`; CenterNet-normalised heads score lower |
 | `budget_frac`, `k`, `utility_type` | 0.4, 2, `"depth_aware"` | Transmission budget and selection |
 | `max_agents`, `use_gt_pose`, `augment` | 5, True, True | Collaborators per frame, pose source, BEV rotation augmentation |
 
 ---
 
-## Known issues (2026-11-02)
+## Known issues (2026-11-03)
 
-Validation AP50 is about 0.001–0.004. Already fixed and verified: BEV grid range, decode NMS, the camera-axis
-convention in `frustum_to_ego`, and the depth bin count. Open findings, with scripts and raw results in
+Runs with the original settings (`*_camfix`) reach validation AP50 of only about 0.001–0.004. Already fixed and
+verified: BEV grid range, decode NMS, the camera-axis convention in `frustum_to_ego`, and the depth bin count.
+Findings, with scripts and raw results in
 [`diagnostics/2026-11_heatmap_loss_and_depth/`](diagnostics/2026-11_heatmap_loss_and_depth/):
 
-1. **Depth supervision is wrong (leading explanation).** The ZoeDepth labels are about 1.7–2.8× the true
-   depth (median +12 m against LiDAR and against ground-truth box distances), and were encoded for
-   64 bins over 4–50 m while training reads them as 128 bins over 4–90 m. A LiDAR-depth oracle experiment
-   (`oracle_depth.py`) is pending.
-2. **Heatmap loss is miscalibrated but is not the bottleneck.** `gaussian_focal_loss` divides the negative
-   term by the number of negative cells instead of positives (as CenterNet does), so a flat ~0.6 heatmap is
+1. **Depth supervision was wrong (leading explanation; fix being trained).** The ZoeDepth labels are about
+   1.7–2.8× the true depth (median +12 m against LiDAR and against ground-truth box distances), and were
+   encoded for 64 bins over 4–50 m while training reads them as 128 bins over 4–90 m. A model trained on them
+   predicts depth about 2.7× too far (1% of pixels within 1 m of LiDAR). Fix: `depth_source="lidar"`, used by
+   `slurm/no_fusion_lidardepth.sh`.
+2. **Heatmap loss was miscalibrated but is not the bottleneck.** The original loss divides the negative term
+   by the number of negative cells instead of positives (as CenterNet does), so a flat ~0.6 heatmap is
    loss-optimal (~2,600 peaks per frame). A one-epoch A/B with the standard loss fixes the calibration but
-   does not improve AP or ranking. Proposed patch: `proposed_heatmap_fix.diff` (not applied).
+   not AP. Now selectable with `hm_norm="centernet"`, `hm_pos_weight=1.0`, `gauss_mode="centerpoint"`.
 3. **Eval-time tuning cannot recover AP.** Score threshold, heatmap smoothing and NMS radius were all tested
    on real model outputs.
+4. **Data loss on 2026-11-02.** Most LiDAR files, the test annotations and the download archives were deleted
+   from scratch (cause unknown). Restored from UCLA Box on 2026-11-03 with `scripts/opv2v_restore/`;
+   the test split loads again (2,170 frames).

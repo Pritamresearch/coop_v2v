@@ -38,7 +38,9 @@ def _pick_device(cfg) -> torch.device:
 
 def build_loaders(cfg: Config):
     from dataclasses import replace as _replace
-    _cfg_noaug = _replace(cfg, augment=False)
+    # val/test never use depth labels (evaluate() has no depth term); "none" also
+    # avoids the LiDAR frame filter, which would empty the test split (no .pcd)
+    _cfg_noaug = _replace(cfg, augment=False, depth_source="none")
     tr = OPV2VDataset(cfg.train_dir,      cfg,
                       max_agents=cfg.max_agents, use_gt_pose=cfg.use_gt_pose)
     va = OPV2VDataset(cfg.val_dir,   _cfg_noaug,

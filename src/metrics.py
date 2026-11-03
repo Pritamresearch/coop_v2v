@@ -512,9 +512,11 @@ def evaluate(model, loader, cfg, hard: bool = True,
         scene  = _to_device(scene, device)
         out    = model(scene, hard=hard, gumbel_T=cfg.gumbel_T1,
                        tau=tau, budget_frac=budget_frac)
-        _val_loss, _ = detection_loss(out, scene["gt"])
+        _val_loss, _ = detection_loss(out, scene["gt"],
+                                      hm_norm=getattr(cfg, "hm_norm", "sepnorm"),
+                                      hm_pos_weight=getattr(cfg, "hm_pos_weight", 4.0))
         ev.val_loss_list.append(float(_val_loss.item()))
-        boxes, scores = decode(out, cfg, score_thresh=0.20, topk=200)
+        boxes, scores = decode(out, cfg, score_thresh=getattr(cfg, "eval_score_thresh", 0.20), topk=200)
         gt_boxes = scene["gt"]["boxes"].cpu().numpy()
         gt_oof   = scene["gt"]["oof"].cpu().numpy()
         kb       = bytes_kb_from_out(out, cfg)

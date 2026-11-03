@@ -196,7 +196,8 @@ def _build_bev_gt_from_boxes(boxes_np: np.ndarray, cfg) -> dict:
             continue
         if abs(cx) < 3.0 and abs(cy) < 2.0:
             continue
-        draw_gaussian_sized(heat, row_f, col_f, w, l, cell)
+        draw_gaussian_sized(heat, row_f, col_f, w, l, cell,
+                            centerpoint=getattr(cfg, "gauss_mode", "legacy") == "centerpoint")
         mask[row, col]      = 1.0
         offset[0, row, col] = col_f - col
         offset[1, row, col] = row_f - row
@@ -279,10 +280,15 @@ def _build_bev_gt(
         v_fwd_ego = R_ego_from_world @ v_fwd_world          # vehicle forward in ego
         yaw_ego = math.atan2(float(v_fwd_ego[1]), float(v_fwd_ego[0]))  # exact heading
 
-        # draw heatmap Gaussian (sigma = 2 cells)
-        g = _gaussian_2d(H, W, row_f, col_f, sigma=2.0)
-        np.maximum(heat, g, out=heat)
-        heat[row, col] = 1.0  # ensure exact 1.0 at centre for focal loss
+        if getattr(cfg, "gauss_mode", "legacy") == "centerpoint":
+            # same size-adaptive target as the (augmented) training path
+            from src.data.bev_augment import draw_gaussian_sized
+            draw_gaussian_sized(heat, row_f, col_f, w_m, l_m, cell, centerpoint=True)
+        else:
+            # draw heatmap Gaussian (sigma = 2 cells)
+            g = _gaussian_2d(H, W, row_f, col_f, sigma=2.0)
+            np.maximum(heat, g, out=heat)
+            heat[row, col] = 1.0  # ensure exact 1.0 at centre for focal loss
 
         mask[row, col]      = 1.0
         offset[0, row, col] = col_f - col
@@ -407,16 +413,22 @@ def _build_depth_gt(
         v_f = K[1, 1] * (-pts_cam[:, 2]) / depth + K[1, 2]
 
         # downsample to feature grid
-        fu = (u_f / downsample).astype(int)
-        fv = (v_f / downsample).astype(int)
+        fu = np.floor(u_f / downsample).astype(int)
+        fv = np.floor(v_f / downsample).astype(int)
         in_fov = (fu >= 0) & (fu < fW) & (fv >= 0) & (fv < fH)
         in_rng = (depth >= d_min) & (depth <= d_max)
         keep   = in_fov & in_rng
+        if not keep.any():
+            continue
 
-        for idx in np.where(keep)[0]:
-            bin_idx = int(np.searchsorted(d_edges, depth[idx]) - 1)
-            bin_idx = max(0, min(depth_K - 1, bin_idx))
-            result[cam, int(fv[idx]), int(fu[idx])] = bin_idx
+        # several returns can fall in one feature cell: keep the NEAREST
+        # (the visible surface), vectorised instead of a per-point loop
+        pix  = fv[keep] * fW + fu[keep]
+        dmin = np.full(fH * fW, np.inf)
+        np.minimum.at(dmin, pix, depth[keep])
+        hit  = np.isfinite(dmin)
+        bins = np.clip(np.searchsorted(d_edges, dmin[hit]) - 1, 0, depth_K - 1)
+        result[cam].reshape(-1)[hit] = bins
 
     return result
 
@@ -682,7 +694,7 @@ class OPV2VDataset(Dataset):
                         self.cfg.lss_d_min, self.cfg.lss_d_max,
                         self.cfg.depth_K,
                     )
-            else:  # "zoedepth"
+            elif self.cfg.depth_source == "zoedepth":
                 _depth_planes = []
                 for _ci, _cn in enumerate(cam_names):
                     _npy = os.path.join(cav_dir,

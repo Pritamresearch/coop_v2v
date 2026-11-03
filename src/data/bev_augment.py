@@ -139,14 +139,23 @@ def gaussian_radius_cells(w_m: float, l_m: float, cell_m: float,
 
 
 def draw_gaussian_sized(heat: np.ndarray, row: float, col: float,
-                        w_m: float, l_m: float, cell_m: float) -> np.ndarray:
+                        w_m: float, l_m: float, cell_m: float,
+                        centerpoint: bool = False) -> np.ndarray:
     """
     Draw a size-adaptive Gaussian onto `heat` (H,W float32).
     Replaces the fixed sigma=2.0 call in _build_bev_gt.
+
+    centerpoint=False keeps the original target (min_overlap=0.7, r>=1,
+    sigma=r/3: a near-delta at 0.4 m cells). centerpoint=True uses the
+    CenterPoint target (min_overlap=0.1, r>=2, sigma=(2r+1)/6).
     """
     H, W = heat.shape
-    r = gaussian_radius_cells(w_m, l_m, cell_m)
-    sigma = r / 3.0
+    if centerpoint:
+        r = max(2.0, gaussian_radius_cells(w_m, l_m, cell_m, min_overlap=0.1))
+        sigma = (2 * int(r) + 1) / 6.0
+    else:
+        r = gaussian_radius_cells(w_m, l_m, cell_m)
+        sigma = r / 3.0
     diameter = 2 * int(r) + 1
 
     # Build kernel

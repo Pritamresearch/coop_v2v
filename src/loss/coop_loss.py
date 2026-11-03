@@ -35,7 +35,9 @@ def coop_loss(out: dict, scene: dict, cfg, lam: float) -> tuple[torch.Tensor, di
     Combined objective. Returns (total_loss, parts_dict).
     'lam' is applied by the training schedule (warm-up sets it to 0).
     """
-    L_det, det_parts = detection_loss(out, scene["gt"])
+    L_det, det_parts = detection_loss(out, scene["gt"],
+                                      hm_norm=getattr(cfg, "hm_norm", "sepnorm"),
+                                      hm_pos_weight=getattr(cfg, "hm_pos_weight", 4.0))
     parts = {"det": det_parts["total"], **{f"det_{k}": v for k, v in det_parts.items()}}
 
     # bandwidth term (differentiable through Gumbel)
