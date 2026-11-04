@@ -435,58 +435,40 @@ def _build_depth_gt(
 
 def _load_pcd(path: str) -> np.ndarray:
     """
-    Minimal PCD loader that handles binary and ASCII. Returns (N,3) float32.
-    Uses open3d when available (faster); falls back to a manual reader.
-    """
-    try:
-        import open3d as o3d
-        pc = o3d.io.read_point_cloud(path)
-        return np.asarray(pc.points, dtype=np.float32)
-    except ImportError:
-        pass
+    Pure-numpy PCD reader (ASCII or binary). Returns the (N, 3) float32 xyz points.
 
-    # minimal manual PCD reader (ASCII and binary_compressed)
+    Deliberately does NOT use open3d: importing open3d inside a forked
+    DataLoader worker deadlocks (all workers hang in `import open3d`), which
+    stalled the first LiDAR-depth training run. Verified point-for-point
+    against open3d on real OPV2V files.
+    """
     with open(path, "rb") as f:
         raw = f.read()
-    lines = raw.split(b"\n")
+    hdr_end = raw.find(b"DATA")
+    hdr_end = raw.find(b"\n", hdr_end) + 1
     header = {}
-    data_start = 0
-    for i, line in enumerate(lines):
-        s = line.decode("ascii", errors="ignore").strip()
-        if s.startswith("DATA"):
-            header["data"] = s.split()[1]
-            data_start = i + 1
-            break
-        parts = s.split()
-        if parts:
+    for line in raw[:hdr_end].decode("ascii", errors="ignore").splitlines():
+        parts = line.split()
+        if parts and not parts[0].startswith("#"):
             header[parts[0]] = parts[1:]
-
-    n_pts = int(header.get("POINTS", [0])[0])
+    n_pts = int(header["POINTS"][0])
+    fields = header["FIELDS"]
     if n_pts == 0:
         return np.zeros((0, 3), dtype=np.float32)
-
-    if header.get("data") == "ascii":
-        body = b"\n".join(lines[data_start:])
-        arr = np.frombuffer(body.replace(b"\r", b""), dtype=np.float32)
-        fields = header.get("FIELDS", [])
-        n_fields = len(fields)
-        arr = arr[:n_pts * n_fields].reshape(n_pts, n_fields)
-        return arr[:, :3]
-    else:
-        # binary: skip to DATA, read raw floats
-        tag = b"DATA binary\n"
-        idx = raw.find(tag)
-        if idx < 0:
-            tag = b"DATA binary_compressed\n"
-            idx = raw.find(tag)
-        if idx < 0:
-            return np.zeros((0, 3), dtype=np.float32)
-        body = raw[idx + len(tag):]
-        size_per_pt = int(header.get("SIZE", [4])[0]) * len(header.get("FIELDS", ["x", "y", "z"]))
-        arr = np.frombuffer(body[:n_pts * size_per_pt], dtype=np.float32)
-        n_fields = len(header.get("FIELDS", ["x", "y", "z"]))
-        arr = arr[:n_pts * n_fields].reshape(n_pts, n_fields)
-        return arr[:, :3]
+    kind = header["DATA"][0]
+    body = raw[hdr_end:]
+    if kind == "ascii":
+        arr = np.fromstring(body.decode("ascii", errors="ignore"), dtype=np.float64, sep=" ")
+        arr = arr[: n_pts * len(fields)].reshape(n_pts, len(fields))
+        cols = [fields.index(c) for c in ("x", "y", "z")]
+        return arr[:, cols].astype(np.float32)
+    if kind == "binary":
+        tmap = {("F", 4): "f4", ("F", 8): "f8", ("U", 1): "u1", ("U", 2): "u2", ("U", 4): "u4",
+                ("I", 1): "i1", ("I", 2): "i2", ("I", 4): "i4"}
+        dt = np.dtype([(n, tmap[(t, int(sz))]) for n, sz, t in zip(fields, header["SIZE"], header["TYPE"])])
+        rec = np.frombuffer(body, dtype=dt, count=n_pts)
+        return np.stack([rec["x"], rec["y"], rec["z"]], axis=1).astype(np.float32)
+    raise ValueError(f"unsupported PCD DATA type {kind!r} in {path}")
 
 
 # ------------------------------------------------------------------ #
