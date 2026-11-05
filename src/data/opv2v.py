@@ -375,6 +375,7 @@ def _build_depth_gt(
     d_min: float,
     d_max: float,
     depth_K: int,
+    spacing: str = "linear",
 ) -> np.ndarray:
     """
     Project the agent's own LiDAR point cloud into each camera to get per-pixel
@@ -393,7 +394,8 @@ def _build_depth_gt(
         return result
 
     # pts are in LiDAR (ego) frame
-    d_edges = np.linspace(d_min, d_max, depth_K + 1)
+    from src.depth_bins import depth_bin_edges
+    d_edges = depth_bin_edges(d_min, d_max, depth_K, spacing)
 
     for cam in range(4):
         R = rots_ego[cam].astype(np.float64)
@@ -675,6 +677,7 @@ class OPV2VDataset(Dataset):
                         self.cfg.lss_downsample,
                         self.cfg.lss_d_min, self.cfg.lss_d_max,
                         self.cfg.depth_K,
+                        getattr(self.cfg, "depth_bins", "linear"),
                     )
             elif self.cfg.depth_source == "zoedepth":
                 _depth_planes = []

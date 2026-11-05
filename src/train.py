@@ -170,6 +170,9 @@ def train(cfg: Config, train_loader=None, val_loader=None, test_loader=None):
     last_val = None
     
     for epoch in range(start_epoch, cfg.epochs):
+        if getattr(cfg, "max_epoch", -1) >= 0 and epoch > cfg.max_epoch:
+            print(f"[{cfg.exp_name}] max_epoch={cfg.max_epoch} reached; stopping (LR schedule still uses epochs={cfg.epochs})")
+            break
         cur_lr = lr_at_epoch(epoch, cfg)
         for _g, _mult in zip(opt.param_groups, lr_mults):
             _g["lr"] = cur_lr * _mult

@@ -174,13 +174,20 @@ def build_encoder(K: int, C: int, cfg) -> nn.Module:
 # ------------------------------------------------------------------ #
 
 def create_frustum(fH: int, fW: int, H_img: int, W_img: int,
-                   d_min: float, d_max: float, K: int) -> torch.Tensor:
+                   d_min: float, d_max: float, K: int,
+                   spacing: str = "linear") -> torch.Tensor:
     """
     Build (K, fH, fW, 3) frustum.
     Each point is (pixel_u, pixel_v, depth_metres) in ORIGINAL image coords.
     fH, fW are the ACTUAL encoder output spatial dims (not H//downsample).
+    spacing: "linear" or "log" depth bins (see src/depth_bins.py).
     """
-    depths = torch.linspace(d_min, d_max, K).view(K, 1, 1).expand(K, fH, fW)
+    if spacing == "log":
+        from src.depth_bins import depth_bin_points
+        d = torch.tensor(depth_bin_points(d_min, d_max, K, spacing), dtype=torch.float32)
+    else:
+        d = torch.linspace(d_min, d_max, K)          # unchanged: bit-identical to earlier runs
+    depths = d.view(K, 1, 1).expand(K, fH, fW)
     us     = torch.linspace(0, W_img - 1, fW).view(1, 1, fW).expand(K, fH, fW)
     vs     = torch.linspace(0, H_img - 1, fH).view(1, fH, 1).expand(K, fH, fW)
     return torch.stack((us, vs, depths), dim=-1)   # (K, fH, fW, 3)
@@ -280,6 +287,7 @@ class LSSBackbone(nn.Module):
             cfg.lss_img_H, cfg.lss_img_W,
             cfg.lss_d_min, cfg.lss_d_max,
             cfg.depth_K,
+            getattr(cfg, "depth_bins", "linear"),
         )
         self.register_buffer("frustum", frustum, persistent=False)
         print(f"[LSSBackbone] encoder={cfg.lss_encoder}  "

@@ -19,7 +19,25 @@ import torch.nn.functional as F
 from .detection import detection_loss
 
 
-def _depth_ce_from_img(depth_img: torch.Tensor, depth_gt_img: torch.Tensor) -> torch.Tensor:
+_BIN_WEIGHTS = {}
+
+
+def _depth_bin_weights(cfg, device) -> torch.Tensor:
+    """1/sqrt(bin frequency) per depth bin, normalised so the average weight over the training
+    label distribution is 1. Frequencies come from scripts/depth_bin_frequency.py."""
+    key = (cfg.depth_bins, cfg.depth_K, str(device))
+    if key not in _BIN_WEIGHTS:
+        import numpy as np, os
+        path = os.path.join(os.path.dirname(__file__), f"depth_bin_freq_{cfg.depth_bins}{cfg.depth_K}.npy")
+        f = np.load(path)
+        w = 1.0 / np.sqrt(np.maximum(f, 1e-6))
+        w = w / (f * w).sum()
+        _BIN_WEIGHTS[key] = torch.tensor(w, dtype=torch.float32, device=device)
+    return _BIN_WEIGHTS[key]
+
+
+def _depth_ce_from_img(depth_img: torch.Tensor, depth_gt_img: torch.Tensor,
+                       bin_weights: torch.Tensor | None = None) -> torch.Tensor:
     """
     depth_img    : (N, n_cams, K, fH, fW)   -- per-pixel depth logits from LSS encoder
     depth_gt_img : (N, n_cams, fH, fW)      -- per-pixel index in {0..K-1}, -1 = ignore
@@ -27,7 +45,11 @@ def _depth_ce_from_img(depth_img: torch.Tensor, depth_gt_img: torch.Tensor) -> t
     N, n_cams, K, fH, fW = depth_img.shape
     logits = depth_img.reshape(-1, K, fH, fW)               # (N*n_cams, K, fH, fW)
     target = depth_gt_img.reshape(-1, fH, fW).long()         # (N*n_cams, fH, fW)
-    return F.cross_entropy(logits, target, ignore_index=-1)
+    if bin_weights is None:
+        return F.cross_entropy(logits, target, ignore_index=-1)
+    ce = F.cross_entropy(logits, target, ignore_index=-1, reduction="none")
+    w = bin_weights[target.clamp(min=0)] * (target >= 0)
+    return (w * ce).sum() / w.sum()
 
 
 def coop_loss(out: dict, scene: dict, cfg, lam: float) -> tuple[torch.Tensor, dict]:
@@ -52,7 +74,9 @@ def coop_loss(out: dict, scene: dict, cfg, lam: float) -> tuple[torch.Tensor, di
     L_depth = torch.zeros((), device=L_det.device, dtype=L_det.dtype)
     if out.get("depth_img") is not None and "depth_gt_img" in scene:
         if cfg.gamma_depth > 0.0:
-            L_depth = _depth_ce_from_img(out["depth_img"], scene["depth_gt_img"])
+            bw = (_depth_bin_weights(cfg, out["depth_img"].device)
+                  if getattr(cfg, "depth_loss_weight", "none") == "inv_sqrt_freq" else None)
+            L_depth = _depth_ce_from_img(out["depth_img"], scene["depth_gt_img"], bw)
     parts["depth"] = float(L_depth.detach())
 
     total = L_det + lam * L_bw + cfg.gamma_depth * L_depth

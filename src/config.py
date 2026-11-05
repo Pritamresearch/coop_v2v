@@ -94,6 +94,11 @@ class Config:
                                        # "centerpoint": train+val min_overlap=0.1, r>=2, sigma=(2r+1)/6
     eval_score_thresh: float = 0.20    # decode() threshold used by evaluate()
 
+    # ---- depth bins / depth loss (defaults reproduce the original runs) ----
+    depth_bins:        str = "linear"  # "linear" | "log" (frustum points and LiDAR label edges together)
+    depth_loss_weight: str = "none"    # "none" | "inv_sqrt_freq" (weight each label by 1/sqrt(bin frequency))
+    max_epoch:         int = -1        # stop after this epoch index (-1: run to `epochs`; LR schedule unchanged)
+
     # ---- inference ----
     budget_frac: float = 0.4
     tau:         float = 0.0
@@ -150,3 +155,5 @@ class Config:
         assert self.depth_source in {"zoedepth", "lidar", "none"}
         assert self.hm_norm in {"sepnorm", "centernet"}
         assert self.gauss_mode in {"legacy", "centerpoint"}
+        assert self.depth_bins in {"linear", "log"}
+        assert self.depth_loss_weight in {"none", "inv_sqrt_freq"}
