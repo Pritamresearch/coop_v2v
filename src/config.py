@@ -98,6 +98,7 @@ class Config:
     depth_bins:        str = "linear"  # "linear" | "log" (frustum points and LiDAR label edges together)
     depth_loss_weight: str = "none"    # "none" | "inv_sqrt_freq" (weight each label by 1/sqrt(bin frequency))
     max_epoch:         int = -1        # stop after this epoch index (-1: run to `epochs`; LR schedule unchanged)
+    save_every:        int = 20        # also keep epoch_<N>.pth every N epochs (besides last.pth / best.pth)
 
     # ---- inference ----
     budget_frac: float = 0.4
