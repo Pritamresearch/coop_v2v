@@ -67,6 +67,14 @@ def main():
 
     base.validate()
 
+    # Pre-training check for cooperative presets: collaborator -> ego feature placement on real data,
+    # with and without the training BEV rotation augmentation (see scripts/check_collab_warp.py).
+    _sel = [x.strip() for x in args.only.split(",") if x.strip()] or ["ours_full", "no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam"]
+    if any(n != "no_fusion" for n in _sel):
+        from scripts.check_collab_warp import run_check
+        if not run_check(base, n_frames=8):
+            raise SystemExit("collaborator warp check FAILED -- refusing to train cooperative presets")
+
     presets = [x.strip() for x in args.only.split(",") if x.strip()] or ["ours_full", "no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam"]
     budgets = [0.05, 0.1, 0.2, 0.3, 0.4, 0.6, 0.8, 1.0]
 

@@ -53,7 +53,8 @@ def bev_rotate_scene(
 
     The rotation is applied to:
     - Camera extrinsics (rots, trans): camera origins and orientations in ego frame
-    - Relative poses: collaborator positions/headings in ego frame
+    - Relative poses: collaborator positions in ego frame (relative headings stay
+      unchanged, since each agent's extrinsics already carry the rotation)
     - GT box centres and headings
 
     Images are NOT modified -- they remain in each camera's own frame.
@@ -92,7 +93,12 @@ def bev_rotate_scene(
         new_xy = R2 @ np.array([dx, dy])
         rel_pose_out[i, 0] = new_xy[0]
         rel_pose_out[i, 1] = new_xy[1]
-        rel_pose_out[i, 2] = dyaw + angle  # heading also rotates
+        # Relative heading is NOT changed. Every agent's extrinsics above are already
+        # rotated by R3 about that agent's own origin, so its BEV features are already
+        # rotated by `angle`; adding `angle` here too rotated collaborators twice
+        # (19-58 m misplacement on real data). Rotating only the translation places
+        # them exactly. Verified by scripts/check_collab_warp.py.
+        rel_pose_out[i, 2] = dyaw
 
     # --- rotate GT boxes ---
     if gt_boxes_out is not None and len(gt_boxes_out) > 0:

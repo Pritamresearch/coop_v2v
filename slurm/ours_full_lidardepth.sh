@@ -26,6 +26,8 @@ export PYTHONPATH=$PROJECT:$PYTHONPATH
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 echo "====== ours_full_lidardepth at $(date) on $(hostname) ======"
+# pre-training check: collaborator features must land on the right ego cells, with and without augmentation
+python -u scripts/check_collab_warp.py --frames 8 || { echo 'collaborator warp check FAILED -- not training'; exit 1; }
 python -u -c "
 import os
 from dataclasses import replace
