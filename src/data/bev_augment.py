@@ -46,6 +46,8 @@ def bev_rotate_scene(
     gt_boxes: np.ndarray,    # (M, 7)  [cx,cy,cz,w,l,h,yaw]
     max_angle_deg: float = 180.0,
     rng=None,
+    flip: bool = False,                 # random flip about x and/or y (BEVDet flip_dx/flip_dy, p=0.5 each)
+    scale_range: tuple = None,          # e.g. (0.95, 1.05); None disables scaling
 ) -> tuple:
     """
     Rotate the entire scene around the ego origin by a random angle.
@@ -67,6 +69,16 @@ def bev_rotate_scene(
     angle = rng.uniform(-max_angle_deg, max_angle_deg) * (math.pi / 180.0)
     R2 = _rot2d(angle)
 
+    # Flip is a reflection, so it composes with the rotation into a single 2x2 M2 (det = +-1).
+    # Scale is kept separate: it must NOT multiply a rotation matrix, and it also has to scale the
+    # frustum depths (see `depth_scale` below), not just the translations.
+    if flip:
+        if rng.uniform() < 0.5:
+            R2 = np.array([[-1.0, 0.0], [0.0, 1.0]], dtype=np.float32) @ R2   # flip x
+        if rng.uniform() < 0.5:
+            R2 = np.array([[1.0, 0.0], [0.0, -1.0]], dtype=np.float32) @ R2   # flip y
+    scale = float(rng.uniform(*scale_range)) if scale_range is not None else 1.0
+
     # --- rotation matrix for 3D (rotate around Z / vertical axis) ---
     R3 = np.eye(3, dtype=np.float32)
     R3[:2, :2] = R2
@@ -85,12 +97,12 @@ def bev_rotate_scene(
     for i in range(N):
         for c in range(n_cams):
             rots_out[i, c] = R3 @ rots[i, c]
-            trans_out[i, c] = R3 @ trans[i, c]
+            trans_out[i, c] = scale * (R3 @ trans[i, c])
 
     # --- rotate relative poses ---
     for i in range(N):
         dx, dy, dyaw = rel_pose[i]
-        new_xy = R2 @ np.array([dx, dy])
+        new_xy = scale * (R2 @ np.array([dx, dy]))
         rel_pose_out[i, 0] = new_xy[0]
         rel_pose_out[i, 1] = new_xy[1]
         # Relative heading is NOT changed. Every agent's extrinsics above are already
@@ -104,14 +116,23 @@ def bev_rotate_scene(
     if gt_boxes_out is not None and len(gt_boxes_out) > 0:
         cx = gt_boxes_out[:, 0].copy()
         cy = gt_boxes_out[:, 1].copy()
-        new_xy = R2 @ np.stack([cx, cy])           # (2, M)
+        new_xy = scale * (R2 @ np.stack([cx, cy]))   # (2, M)
         gt_boxes_out[:, 0] = new_xy[0]
         gt_boxes_out[:, 1] = new_xy[1]
-        gt_boxes_out[:, 6] = gt_boxes_out[:, 6] + angle
+        gt_boxes_out[:, 2] = scale * gt_boxes_out[:, 2]          # cz
+        gt_boxes_out[:, 3:6] = scale * gt_boxes_out[:, 3:6]      # w, l, h
+        # Transform the heading VECTOR through R2 rather than adding `angle`: under a flip R2 is a
+        # reflection, and yaw + angle is wrong for a reflection (it would keep the handedness).
+        # atan2 of the rotated/reflected forward vector is correct for both cases.
+        yaw = gt_boxes_out[:, 6]
+        fwd = R2 @ np.stack([np.cos(yaw), np.sin(yaw)])          # (2, M)
+        gt_boxes_out[:, 6] = np.arctan2(fwd[1], fwd[0])
         # wrap yaw to [-pi, pi] so metric wrapping and sin/cos targets are consistent
         gt_boxes_out[:, 6] = (gt_boxes_out[:, 6] + np.pi) % (2 * np.pi) - np.pi   # yaw
 
-    return rots_out, trans_out, rel_pose_out, gt_boxes_out
+    # `scale` is returned because a true scene scale also needs the frustum depths scaled
+    # (un-projection is linear in depth); the caller passes it to the backbone as depth_scale.
+    return rots_out, trans_out, rel_pose_out, gt_boxes_out, scale
 
 
 # ===========================================================================

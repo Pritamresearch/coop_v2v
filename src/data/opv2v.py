@@ -572,6 +572,8 @@ class OPV2VDataset(Dataset):
         self._mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
         self._std  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
         self.augment = getattr(cfg, "augment", True)
+        self._img_aug = bool(getattr(cfg, "img_aug", False))
+        self._last_post = None
         self._rng   = np.random.default_rng(getattr(cfg, "seed", 0))
 
     def __len__(self) -> int:
@@ -615,6 +617,8 @@ class OPV2VDataset(Dataset):
         all_rots    = np.zeros((N, n_cams, 3, 3), dtype=np.float32)
         all_trans   = np.zeros((N, n_cams, 3),    dtype=np.float32)
         all_rel     = np.zeros((N, 3),             dtype=np.float32)   # [dx,dy,dyaw]
+        all_post_rots  = np.tile(np.eye(3, dtype=np.float32), (N, n_cams, 1, 1))
+        all_post_trans = np.zeros((N, n_cams, 3), dtype=np.float32)
 
         depth_gt_imgs = -np.ones((N, n_cams,
                                    self.IMG_H // self.cfg.lss_downsample,
@@ -659,6 +663,8 @@ class OPV2VDataset(Dataset):
                 img_path = os.path.join(cav_dir, f"{ts}_{cam_name}.png")
                 img = self._load_image(img_path)
                 all_images[i, cam_idx] = img        # (3, H, W) float32 normalised
+                if self._last_post is not None:
+                    all_post_rots[i, cam_idx], all_post_trans[i, cam_idx] = self._last_post
 
             if i == 0:
                 ego_rots   = all_rots[0]
@@ -702,6 +708,7 @@ class OPV2VDataset(Dataset):
         # ----------------------------------------------------------
         # 4) BEV GT from ego-frame vehicle annotations
         # ----------------------------------------------------------
+        depth_scale = 1.0
         vehicles = ego_yaml.get("vehicles", {})
         gt_dict  = _build_bev_gt(vehicles, np.linalg.inv(ego_T_world), self.cfg, ego_T_world)
 
@@ -710,12 +717,16 @@ class OPV2VDataset(Dataset):
         # object positions so the model cannot memorise fixed BEV locations.
         if self.augment and getattr(self.cfg, "augment", True):
             from src.data.bev_augment import bev_rotate_scene
-            all_rots, all_trans, all_rel, rot_boxes = bev_rotate_scene(
+            _sr = tuple(getattr(self.cfg, "bev_scale_range", ()) or ())
+            all_rots, all_trans, all_rel, rot_boxes, _scale = bev_rotate_scene(
                 all_rots, all_trans, all_rel,
                 gt_dict["boxes"].copy(),
-                max_angle_deg=180.0,
+                max_angle_deg=float(getattr(self.cfg, "bev_rot_deg", 180.0)),
                 rng=self._rng,
+                flip=bool(getattr(self.cfg, "bev_flip", False)),
+                scale_range=_sr if len(_sr) == 2 else None,
             )
+            depth_scale = _scale
             gt_dict = _build_bev_gt_from_boxes(rot_boxes, self.cfg)
 
 
@@ -740,8 +751,9 @@ class OPV2VDataset(Dataset):
             "intrins":      t(all_intrins),
             "rots":         t(all_rots),
             "trans":        t(all_trans),
-            "post_rots":    None,
-            "post_trans":   None,
+            "post_rots":    t(all_post_rots) if self._img_aug and self.augment else None,
+            "post_trans":   t(all_post_trans) if self._img_aug and self.augment else None,
+            "depth_scale":  float(depth_scale),
             "rel_pose":     t(all_rel),
             "depth_gt_img": t(depth_gt_imgs),
             "gt": {
@@ -794,10 +806,19 @@ class OPV2VDataset(Dataset):
         if img is None:
             return np.zeros((3, self.IMG_H, self.IMG_W), dtype=np.float32)
         img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        if img.shape[:2] != (self.IMG_H, self.IMG_W):
-            img = cv2.resize(img, (self.IMG_W, self.IMG_H), interpolation=cv2.INTER_LINEAR)
-        if self.augment:
-            img = self._augment_image(img)
+        if self._img_aug and self.augment:
+            # BEVDet-style geometric aug does its own resize/crop from the NATIVE image, and returns
+            # post_rot/post_tran describing the pixel mapping. No photometric jitter (BEVDet has none).
+            from src.data.img_augment import sample_params, apply as _apply
+            p = sample_params(img.shape[:2], (self.IMG_H, self.IMG_W), self._rng, train=True)
+            img, pr, pt = _apply(img, p)
+            self._last_post = (pr, pt)
+        else:
+            if img.shape[:2] != (self.IMG_H, self.IMG_W):
+                img = cv2.resize(img, (self.IMG_W, self.IMG_H), interpolation=cv2.INTER_LINEAR)
+            if self.augment and not self._img_aug:
+                img = self._augment_image(img)
+            self._last_post = None
         img = img.astype(np.float32) / 255.0
         img = (img - self._mean[None, None, :]) / self._std[None, None, :]
         return img.transpose(2, 0, 1)          # (3, H, W)

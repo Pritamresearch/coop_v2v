@@ -528,12 +528,18 @@ def test9_quantise_ste():
 
 
 def _pinhole_project(P_cam, fx=500.0, fy=500.0, cx=320.0, cy=240.0):
-    """Independent forward pinhole projection, used only to SYNTHESIZE the
-    test input -- not the code under test."""
-    x, y, z = P_cam
-    u = fx * x / z + cx
-    v = fy * y / z + cy
-    return u, v, z
+    """Independent forward projection, used only to SYNTHESIZE the test input -- not the code
+    under test.
+
+    P_cam is in THIS DATASET'S camera convention: (depth, right, up), CARLA-native. That is the
+    convention frustum_to_ego has used since the 2026-10-27 axis fix (verified against real data).
+    Before that fix this helper assumed standard pinhole axes (right, down, forward), which is why
+    this test failed from the fix until 2026-11-09 -- the test encoded the old convention, the
+    code was correct."""
+    depth, right, up = P_cam
+    u = fx * right / depth + cx
+    v = fy * (-up) / depth + cy
+    return u, v, depth
 
 
 def test10_frustum_to_ego():
@@ -546,7 +552,8 @@ def test10_frustum_to_ego():
     R = torch.tensor([[c, -s, 0.0], [s, c, 0.0], [0.0, 0.0, 1.0]], dtype=torch.float32)
     t = torch.tensor([2.0, 0.0, 1.0], dtype=torch.float32)
 
-    P_cam = torch.tensor([0.3, -0.2, 8.0], dtype=torch.float32)  # cam-frame point, 8m in front
+    # (depth, right, up) in this dataset's camera convention: 8 m ahead, 0.3 m right, 0.2 m down
+    P_cam = torch.tensor([8.0, 0.3, -0.2], dtype=torch.float32)
     u, v, d = _pinhole_project(P_cam.tolist())
     intrins = torch.tensor([[500.0, 0.0, 320.0], [0.0, 500.0, 240.0], [0.0, 0.0, 1.0]])
 
@@ -624,6 +631,17 @@ def main():
     print(f"SUMMARY: frustum_to_ego (executed)      = {'CORRECT' if r10 else 'MISMATCH -- see above'}")
     print("=" * 70)
 
+    # Exit non-zero on failure so this can actually gate a training job. Until 2026-11-09 main()
+    # always exited 0, which is how TEST 10 stayed red unnoticed after the camera-convention fix.
+    failed = [n for n, r in (("encode/decode", r1), ("pos_weight", r4), ("warp_to_ego", r5),
+                             ("build_bev_gt_from_boxes", r6), ("gated_fusion", r7),
+                             ("hard_topk", r8), ("quantise_ste", r9), ("frustum_to_ego", r10))
+              if not r]
+    if failed:
+        print("FAILED: " + ", ".join(failed))
+    return 0 if not failed else 1
+
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())

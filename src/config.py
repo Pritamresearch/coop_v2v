@@ -100,6 +100,12 @@ class Config:
     max_epoch:         int = -1        # stop after this epoch index (-1: run to `epochs`; LR schedule unchanged)
     save_every:        int = 20        # also keep epoch_<N>.pth every N epochs (besides last.pth / best.pth)
 
+    # ---- augmentation (defaults reproduce the runs before 2026-11-09) ----
+    img_aug:        bool  = False      # BEVDet geometric image-view aug (resize/crop/flip/rotate)
+    bev_rot_deg:    float = 180.0      # BEV rotation range; BEVDet uses 22.5
+    bev_flip:       bool  = False      # BEV flip about x and/or y, p=0.5 each (BEVDet flip_dx/dy)
+    bev_scale_range: tuple = ()        # e.g. (0.95, 1.05); empty disables (BEVDet scale_lim)
+
     # ---- inference ----
     budget_frac: float = 0.4
     tau:         float = 0.0
@@ -157,4 +163,5 @@ class Config:
         assert self.hm_norm in {"sepnorm", "centernet"}
         assert self.gauss_mode in {"legacy", "centerpoint"}
         assert self.depth_bins in {"linear", "log"}
+        assert len(self.bev_scale_range) in (0, 2)
         assert self.depth_loss_weight in {"none", "inv_sqrt_freq"}

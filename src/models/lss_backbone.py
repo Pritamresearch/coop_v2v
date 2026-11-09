@@ -204,9 +204,15 @@ def frustum_to_ego(
     intrins:   torch.Tensor,          # (n_cams, 3, 3)
     post_rots:  Optional[torch.Tensor],
     post_trans: Optional[torch.Tensor],
+    depth_scale: float = 1.0,         # BEV scale augmentation (see src/data/bev_augment.py)
 ) -> torch.Tensor:                    # (n_cams, K, fH, fW, 3)
     n_cams = rots.shape[0]
     pts = frustum.unsqueeze(0).expand(n_cams, -1, -1, -1, -1).clone()
+
+    # A true scene scale needs the frustum depths scaled as well as the translations: K^-1 applied
+    # to (u*d, v*d, d) is linear in d, so scaling d scales the camera-frame point exactly.
+    if depth_scale != 1.0:
+        pts[..., 2] = pts[..., 2] * depth_scale
 
     # undo image augmentation
     if post_rots is not None and post_trans is not None:
@@ -321,6 +327,7 @@ class LSSBackbone(nn.Module):
         trans:      torch.Tensor,
         post_rots:  Optional[torch.Tensor],
         post_trans: Optional[torch.Tensor],
+        depth_scale: float = 1.0,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         cfg = self.cfg
 
@@ -339,7 +346,8 @@ class LSSBackbone(nn.Module):
 
         # ---- frustum geometry ----
         pts_ego = frustum_to_ego(
-            self.frustum, rots, trans, intrins, post_rots, post_trans
+            self.frustum, rots, trans, intrins, post_rots, post_trans,
+            depth_scale=depth_scale,
         )
         row, col, valid = self._bev_coords(pts_ego)
 
@@ -382,7 +390,8 @@ class LSSBackbone(nn.Module):
             pr = post_rots[i]  if post_rots  is not None else None
             pt = post_trans[i] if post_trans is not None else None
             Fi, Di, dimg = self._forward_agent(
-                images[i], intrins[i], rots[i], trans[i], pr, pt
+                images[i], intrins[i], rots[i], trans[i], pr, pt,
+                depth_scale=float(scene.get("depth_scale", 1.0)),
             )
             F_list.append(Fi)
             depth_list.append(Di)

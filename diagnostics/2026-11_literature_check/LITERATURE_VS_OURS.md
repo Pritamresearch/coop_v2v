@@ -159,13 +159,15 @@ cooperative perception" is refuted on its face.** The threshold value is given n
 
 | Axis | CoCa3D paper | CoCa3D code | Ours |
 |---|---|---|---|
+| **Conditioning** | **sender-side only** — `U_i` is the sender's own depth entropy | sender-side (inert) | **receiver-centric**: utility × ego need, so the ego's own uncertainty decides what it asks for | 
 | Uncertainty space | 2D image feature map | BEV (but mask unused) | BEV, after splatting |
 | Real D-bin entropy? | yes | **no** (length-1 axis) | yes |
-| Polarity | selects **low** entropy | n/a (inert) | selects high utility — opposite |
 | Selection rule | swept threshold | none | **top-k under a fixed byte budget** |
 | What is transmitted | per-voxel depth confidence + voxel features, **plus** a separate BEV feature message | dense everything | **BEV features only** |
 | What gates the feature message | **detection confidence** (`c_thre`, i.e. Where2comm's criterion) | nothing | **the depth-uncertainty utility itself** |
 | Fusion | point-wise **max** (argues explicitly against attention) | `MaxFusion` | **attention, gated by the utility** |
+
+(Polarity is *not* a difference: our utility is ‖F‖·exp(−α·D), which also favours low depth entropy.)
 | Does collaboration improve depth? | **yes** — the paper's core contribution | yes | **no, by design** |
 
 ## Suggested framing (replaces the "first" claim)

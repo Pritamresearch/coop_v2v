@@ -26,8 +26,13 @@ ANGLES = (30.0, 90.0, 180.0, -120.0)
 
 
 class _FixedAngle:
+    """Deterministic stand-in for a Generator: fixes the angle, makes both flip coins come up
+    heads (uniform() < 0.5), and returns the low end of any other range (e.g. the scale)."""
     def __init__(self, deg): self.deg = deg
-    def uniform(self, lo, hi): return self.deg
+    def uniform(self, lo=None, hi=None):
+        if lo is None: return 0.0                  # flip coin -> always flip
+        if (lo, hi) == (-self.deg, self.deg) or hi == self.deg: return self.deg
+        return lo
 
 
 def run_check(cfg, n_frames=8, split="val", rotate_fn=None, verbose=True) -> bool:
@@ -47,9 +52,10 @@ def run_check(cfg, n_frames=8, split="val", rotate_fn=None, verbose=True) -> boo
                 if 0 <= u < cfg.lss_img_W and 0 <= v < cfg.lss_img_H: return c, float(u), float(v), float(d)
         return None
 
-    def place(j, c, u, v, d, rots, trans, intr, rel):
+    def place(j, c, u, v, d, rots, trans, intr, rel, dscale=1.0):
         fr = torch.tensor([[[[u, v, d]]]], dtype=torch.float32)
-        p = LB.frustum_to_ego(fr, torch.tensor(rots[j]), torch.tensor(trans[j]), torch.tensor(intr[j]), None, None)[c, 0, 0, 0]
+        p = LB.frustum_to_ego(fr, torch.tensor(rots[j]), torch.tensor(trans[j]), torch.tensor(intr[j]),
+                              None, None, depth_scale=dscale)[c, 0, 0, 0]
         r, cc, ok = LB.LSSBackbone._bev_coords(bb, p.view(1, 3))
         if not bool(ok[0]): return None
         oh = torch.zeros(cfg.grid_H, cfg.grid_W); oh[int(r[0]), int(cc[0])] = 1.0
@@ -70,14 +76,26 @@ def run_check(cfg, n_frames=8, split="val", rotate_fn=None, verbose=True) -> boo
                 if vis: pairs.append((k, j, vis))
             vis0 = visible(g[k, :3].astype(np.float32), rots[0], trans[0], intr[0])
             if vis0: pairs.append((k, 0, vis0))
-        cases = {"no augmentation": (rots, trans, rel, g)}
+        cases = {"no augmentation": (rots, trans, rel, g, 1.0)}
         for a in ANGLES:
-            cases[f"augmented {a:+.0f} deg"] = rotate_fn(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=_FixedAngle(a))
-        for name, (r2, t2, rel2, b2) in cases.items():
+            cases[f"rot {a:+.0f}"] = rotate_fn(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=_FixedAngle(a))
+        # flip and scale are the same bug class as the rotation warp bug: a reflection or a rescale
+        # applied to the extrinsics but not to rel_pose/boxes silently misplaces collaborators.
+        for a in (0.0, 90.0):
+            cases[f"rot {a:+.0f} +flip"] = rotate_fn(rots.copy(), trans.copy(), rel.copy(), g.copy(),
+                                                     rng=_FixedAngle(a), flip=True)
+            for sc in (0.95, 1.05):
+                cases[f"rot {a:+.0f} +scale {sc}"] = rotate_fn(rots.copy(), trans.copy(), rel.copy(), g.copy(),
+                                                               rng=_FixedAngle(a), scale_range=(sc, sc))
+            cases[f"rot {a:+.0f} +flip+scale"] = rotate_fn(rots.copy(), trans.copy(), rel.copy(), g.copy(),
+                                                           rng=_FixedAngle(a), flip=True, scale_range=(0.95, 1.05))
+        for name, case in cases.items():
+            r2, t2, rel2, b2 = case[:4]
+            dscale = case[4] if len(case) > 4 else 1.0
             for k, j, (c, u, v, d) in pairs:
                 key = (name, "ego camera (control)" if j == 0 else "collaborators")
                 rel_use = rel2.copy(); rel_use[0] = 0.0             # ego row is never warped in the model
-                cw = place(j, c, u, v, d, r2, t2, intr, rel_use)
+                cw = place(j, c, u, v, d, r2, t2, intr, rel_use, dscale)
                 if cw is None: continue                              # outside the agent's own BEV grid
                 t = cell_of(b2[k, :2])
                 errs.setdefault(key, []).append(np.hypot(cw[0] - t[0], cw[1] - t[1]) * cell)

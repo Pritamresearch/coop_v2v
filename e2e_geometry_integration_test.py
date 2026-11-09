@@ -37,6 +37,7 @@ sys.path.insert(0, ".")
 from dataclasses import replace
 
 import numpy as np
+import os
 import torch
 
 from src.config import Config
@@ -58,7 +59,14 @@ def main():
     base = Config()
     base.validate()
     cfg = replace(base, lss_encoder="small")   # CPU-only debugging encoder; geometry unaffected
+    # COOP_IMG_AUG=1 runs the same coverage check with the TRAINING augmentation on (image aug +
+    # BEV rotation/flip/scale), which is the configuration the image-aug A/B arms train with.
+    _img_aug = os.environ.get("COOP_IMG_AUG") == "1"
+    if _img_aug:
+        cfg = replace(cfg, img_aug=True, bev_flip=True, bev_scale_range=(0.95, 1.05),
+                      bev_rot_deg=float(os.environ.get("COOP_BEV_ROT", "180")))
     cfg.validate()
+    print(f"image augmentation: {'ON (train loader)' if _img_aug else 'OFF (val loader)'}")
     print(f"Config (CPU test): bev=+/-{cfg.bev_x_max}m cell_m={cfg.cell_m} grid={cfg.grid_H}x{cfg.grid_W} "
           f"depth_K={cfg.depth_K} lss_d_min={cfg.lss_d_min} lss_d_max={cfg.lss_d_max} encoder={cfg.lss_encoder}")
 
@@ -71,7 +79,7 @@ def main():
     backbone.eval()
 
     n_frames_to_test = 8
-    it = iter(va)
+    it = iter(tr if _img_aug else va)   # the train loader is the one with augmentation enabled
 
     n_boxes_total = 0
     n_boxes_covered_exact = 0
@@ -108,7 +116,8 @@ def main():
         from src.models.lss_backbone import frustum_to_ego
         with torch.no_grad():
             pts_ego = frustum_to_ego(backbone.frustum, ego_rots, ego_trans, ego_intrins,
-                                      post_rots, post_trans)
+                                      post_rots, post_trans,
+                                      depth_scale=float(scene.get("depth_scale", 1.0)))
             row, col, valid = backbone._bev_coords(pts_ego)
 
         if torch.isnan(pts_ego).any() or torch.isinf(pts_ego).any():
@@ -169,8 +178,11 @@ def main():
         print("This would mean the geometry is still broken somewhere despite both fixes --")
         print("do not submit training before investigating further.")
     print("=" * 70)
+    # Exit non-zero unless coverage is in the PASS band, so this can gate a training job.
+    return 0 if (n_boxes_total > 0 and n_boxes_covered_tol1 / n_boxes_total > 0.7) else 1
 
 
 if __name__ == "__main__":
-    main()
+    import sys
+    sys.exit(main())
     
