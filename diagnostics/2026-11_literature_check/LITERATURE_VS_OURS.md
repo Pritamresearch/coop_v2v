@@ -122,3 +122,73 @@ only; CoBEVT's camera track is segmentation IoU; CoCa3D's camera AP is on **OPV2
 
 Different dataset variant, range and protocol, so not a like-for-like gap — but roughly 7× below the
 single-agent camera-only reference, which says the remaining gap is large and structural, not a tuning gap.
+
+---
+
+# CoCa3D deep dive (2026-11-09) — our "first depth-uncertainty utility" claim
+
+Read: [paper](https://arxiv.org/html/2303.13560v1) in full, and the official code
+([repo](https://github.com/MediaBrain-SJTU/CoCa3D), branch `master`) — in particular
+`opencood/models/sub_modules/homography.py` (the Co-Depth implementation),
+`opencood/models/lift_splat_shoot_colla.py`, and
+`opencood/hypes_yaml/opv2v/camera/opv2v_max_ms_fusion_w_single_wo_gt_depth_w_colla_LID.yaml`.
+
+## The claim does NOT survive as stated
+
+CoCa3D §3.3.1 defines `U_i(h,w) = H(D_i(h,w))` — the entropy of a per-pixel depth distribution — and
+thresholds it (`U_i < u_thre`) to decide what an agent transmits. That is a depth-uncertainty-derived
+transmission utility, published at CVPR 2023. **An unqualified "first depth-uncertainty-based utility for
+cooperative perception" is refuted on its face.** The threshold value is given nowhere in the paper.
+
+## What the released code actually does (differs from its own paper)
+
+- `uncertainty()` in `homography.py` is fed the tensor **after** `voxel_pooling`, i.e. BEV space, not the
+  image space the paper describes.
+- That tensor has a channel dim of **1** (one splatted scalar per BEV cell), so `entropy.sum(dim=-3)`
+  reduces over a length-1 axis: it computes `-p·log(p+1e-6)` of a single scalar, **not the entropy of a
+  distribution**.
+- **The mask is dead code.** `u_masks` is computed, the line applying it is commented out, and
+  `cost_volume(...)` is called with `masked_depth_probs=None`. The depth-uncertainty gate has no effect on
+  the released forward pass. `u_thre=10` is a hardcoded default appearing in no config (max possible
+  entropy with 48 bins is ln 48 ≈ 3.87, so it would select everything anyway).
+- The live receiver-side gate is `valid_depth_thre=0.1` on depth *probability*, not entropy.
+- `c_thre` (the detection-confidence gate for the feature message) is **absent from the code entirely**;
+  fusion is plain `MaxFusion` over all agents, dense, unmasked.
+
+## Where we genuinely differ (defensible, each verified)
+
+| Axis | CoCa3D paper | CoCa3D code | Ours |
+|---|---|---|---|
+| Uncertainty space | 2D image feature map | BEV (but mask unused) | BEV, after splatting |
+| Real D-bin entropy? | yes | **no** (length-1 axis) | yes |
+| Polarity | selects **low** entropy | n/a (inert) | selects high utility — opposite |
+| Selection rule | swept threshold | none | **top-k under a fixed byte budget** |
+| What is transmitted | per-voxel depth confidence + voxel features, **plus** a separate BEV feature message | dense everything | **BEV features only** |
+| What gates the feature message | **detection confidence** (`c_thre`, i.e. Where2comm's criterion) | nothing | **the depth-uncertainty utility itself** |
+| Fusion | point-wise **max** (argues explicitly against attention) | `MaxFusion` | **attention, gated by the utility** |
+| Does collaboration improve depth? | **yes** — the paper's core contribution | yes | **no, by design** |
+
+## Suggested framing (replaces the "first" claim)
+
+> Prior work uses depth uncertainty to decide which *depth* cues to share and refines depth by multi-view
+> consistency (CoCa3D, CVPR'23). We instead derive a per-BEV-cell utility from the splatted depth
+> distribution's entropy and use it, under a fixed byte budget, to select and gate the *feature* message,
+> without sharing depth or altering any agent's depth estimate.
+
+## Bandwidth numbers are not comparable, and this is checkable
+
+The paper specifies only "message size by byte in log scale with base 2" and "no extra compression" — no
+formula, no per-element width, no statement of whether the depth and feature messages are summed. **The
+released code contains no byte accounting at all**: no `comm_rate`/`comm_vol`, and `inference.py` rejects
+the `intermediate_with_comm` mode its own README documents. Our per-cell byte accounting therefore cannot
+be put on their axis. The defensible move is to state our byte model explicitly and note that CoCa3D's
+published axis is not reproducible from the official release.
+
+## Running CoCa3D as a baseline: high cost, likely not worth it
+
+No pretrained weights (repo is 4.8 MB, `has_downloads: false`). Needs OPV2V+ (a *re-simulation* with extra
+camera+depth agents, not derivable from vanilla OPV2V) from the CoPerception+ page; `use_depth_gt: True` so
+depth-sensor GT is mandatory; undocumented `valid_data_info.pkl` index files must be regenerated; configs
+carry the authors' absolute cluster paths; legacy environment (python 3.7, torch 1.10.1+cu111, spconv
+v1.2.1 from source); full training from scratch (50 + 20 epochs); and the message selection and byte
+accounting would have to be implemented by us.
