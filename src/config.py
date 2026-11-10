@@ -32,7 +32,7 @@ class Config:
     # ---- ABLATION SWITCHES (change ONE to run an ablation) ----
     k:                int  = 2
     use_utility_gate: bool = True
-    utility_type:     str  = "depth_aware"   # depth_aware | confidence_only | magnitude_only | learned_fue
+    utility_type:     str  = "depth_aware"   # depth_aware | confidence_only | magnitude_only | learned_fue | depth_entropy
     receiver_centric: bool = True
     alpha:            float = 4.0
     joint_train:      bool = True
@@ -106,6 +106,17 @@ class Config:
     bev_flip:       bool  = False      # BEV flip about x and/or y, p=0.5 each (BEVDet flip_dx/dy)
     bev_scale_range: tuple = ()        # e.g. (0.95, 1.05); empty disables (BEVDet scale_lim)
 
+    # ---- baseline plumbing (defaults reproduce every run before 2026-11-10) ----
+    need_source:    str = "depth"       # receiver request map: "depth" = 1-ego_vis from depth
+                                        # uncertainty (ours); "confidence" = 1 - ego confidence
+                                        # (Where2comm-faithful)
+    fusion_type:    str = "attention"   # "attention" (ours) | "max" (CoCa3D / CoBEVT point-wise max)
+    selection_mode: str = "topk"        # "topk" = fixed byte budget (ours)
+                                        # "threshold" = send every cell above utility_thresh
+                                        # (CoCa3D-faithful; variable bytes per frame)
+    utility_thresh: float = 0.0         # used by selection_mode="threshold"; set by calibration
+    count_control_bytes: bool = True    # include the dense per-agent utility/confidence map
+
     # ---- inference ----
     budget_frac: float = 0.4
     tau:         float = 0.0
@@ -165,3 +176,6 @@ class Config:
         assert self.depth_bins in {"linear", "log"}
         assert len(self.bev_scale_range) in (0, 2)
         assert self.depth_loss_weight in {"none", "inv_sqrt_freq"}
+        assert self.need_source in {"depth", "confidence"}
+        assert self.fusion_type in {"attention", "max"}
+        assert self.selection_mode in {"topk", "threshold"}

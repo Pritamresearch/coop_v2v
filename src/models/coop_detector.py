@@ -111,7 +111,8 @@ class CoopDetector(nn.Module):
         self.cfg = cfg
         self.backbone = build_backbone(cfg)
         self.utility = UtilityHead(C=cfg.feat_C, utility_type=cfg.utility_type, alpha=cfg.alpha)
-        self.fusion = UtilityGatedFusion(C=cfg.feat_C, use_utility_gate=cfg.use_utility_gate)
+        self.fusion = UtilityGatedFusion(C=cfg.feat_C, use_utility_gate=cfg.use_utility_gate,
+                                         fusion_type=getattr(cfg, 'fusion_type', 'attention'))
         self.head = DetHead(C=cfg.feat_C, predict_yaw=cfg.predict_yaw, predict_z=cfg.predict_z)
 
         # Optionally freeze backbone + utility for ablation A6 (separate training)
@@ -136,6 +137,22 @@ class CoopDetector(nn.Module):
         # Threshold: cells with D < 0.5 are considered visible
         return (1.0 - D_ego).clamp(0.0, 1.0)
 
+
+    def _request_map(self, F_all: torch.Tensor, D_all: torch.Tensor) -> torch.Tensor:
+        """Receiver 'need' map: high where the ego wants a collaborator's help.
+
+        cfg.need_source:
+          "depth"      -- 1 - ego_vis, from the ego's depth uncertainty (ours).
+          "confidence" -- 1 - ego confidence (Where2comm-faithful). Deliberately independent of
+                          depth, so a confidence-vs-depth comparison is not contaminated by our
+                          depth-based need leaking through the request map.
+
+        forward() and scripts/check_baseline_components.py both call THIS method, so the gate
+        tests the real code path rather than a reimplementation of it.
+        """
+        if getattr(self.cfg, "need_source", "depth") == "confidence":
+            return 1.0 - torch.sigmoid(self.utility.conf_head(F_all[0:1])).squeeze(1).squeeze(0)
+        return 1.0 - self._ego_visibility(D_all[0])
 
     def _budget_cells(self) -> int:
         return int(self.cfg.budget_frac * self.cfg.grid_H * self.cfg.grid_W)
@@ -186,8 +203,7 @@ class CoopDetector(nn.Module):
         # 4) Receiver-centric 'need' from the ego
         # Depth-uncertainty-based ego visibility:
         # cells where ego has confident depth are "seen"; uncertain cells need help
-        ego_vis = self._ego_visibility(D_all[0])   # D_all[0] = ego depth uncertainty
-        need = 1.0 - ego_vis
+        need = self._request_map(F_all, D_all)
         U_r = sched.receiver_utility(U_warped, need, cfg.receiver_centric)
         # 5) Selection
         #    Ego is agent 0; it does not "transmit" to itself. Exclude row 0 from selection
@@ -195,6 +211,11 @@ class CoopDetector(nn.Module):
         U_r_others = U_r[1:]                                 # (N-1, H, W)
         if cfg.dense_transmit:
             M_others = torch.ones_like(U_r_others)
+        elif getattr(cfg, "selection_mode", "topk") == "threshold":
+            # CoCa3D-faithful: every cell above a fixed utility threshold is sent, so the byte
+            # cost VARIES per frame instead of being capped. The threshold is calibrated on val
+            # (scripts/calibrate_threshold.py) to hit a target MEAN rate.
+            M_others = (U_r_others > cfg.utility_thresh).float()
         elif hard:
             n_keep = self._budget_cells() if budget_frac is None else \
                      int((budget_frac if budget_frac is not None else cfg.budget_frac)
@@ -223,7 +244,13 @@ class CoopDetector(nn.Module):
         out = self.head(F_star)
         # 9) Bandwidth accounting (differentiable via M)
         #    Expected bytes = per_cell_bytes * sum(M_others)  (soft in train, exact in infer)
-        soft_B = M_others.float().sum() * float(cfg.per_cell_bytes)
+        # Bytes = selected cells + the dense control map each collaborator sends (its utility /
+        # confidence map). The control map was previously counted only in metrics.bytes_kb_from_out
+        # and not in this differentiable term, and it was not scaled by agent count.
+        n_senders = max(N - 1, 0)
+        control_B = (float(cfg.grid_H * cfg.grid_W * cfg.b_util) * n_senders
+                     if getattr(cfg, "count_control_bytes", True) else 0.0)
+        soft_B = M_others.float().sum() * float(cfg.per_cell_bytes) + control_B
         n_cells = int(M_others.sum().item()) if hard else int(M_others.detach().float().sum().item())
 
         out.update({
@@ -233,6 +260,7 @@ class CoopDetector(nn.Module):
             "M": M,
             "soft_B": soft_B,
             "n_cells": n_cells,
+            "n_senders": n_senders,
             "F_star": F_star,
         })
         return out

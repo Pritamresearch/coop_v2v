@@ -490,8 +490,14 @@ def bytes_kb_from_out(out: dict, cfg) -> float:
     if cfg.no_fusion:
         return 0.0
     n = out.get("n_cells", 0)
-    cell_bytes     = n * cfg.per_cell_bytes
-    util_map_bytes = cfg.grid_H * cfg.grid_W * cfg.b_util
+    cell_bytes = n * cfg.per_cell_bytes
+    # The dense control map is sent by EACH collaborator, so it scales with the number of senders.
+    # It was previously counted once regardless of agent count, which under-reported multi-agent
+    # bandwidth; it is also now included in the differentiable soft_B (coop_detector), so the two
+    # byte figures agree.
+    n_senders = max(int(out.get("n_senders", 1)), 0)
+    util_map_bytes = (cfg.grid_H * cfg.grid_W * cfg.b_util * n_senders
+                      if getattr(cfg, "count_control_bytes", True) else 0)
     return (cell_bytes + util_map_bytes) / 1024.0
 
 

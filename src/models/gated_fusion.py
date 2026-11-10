@@ -21,10 +21,12 @@ import torch.nn as nn
 
 
 class UtilityGatedFusion(nn.Module):
-    def __init__(self, C: int, use_utility_gate: bool = True, beta_init: float = 1.0):
+    def __init__(self, C: int, use_utility_gate: bool = True, beta_init: float = 1.0,
+                 fusion_type: str = "attention"):
         super().__init__()
         self.C = C
         self.use_utility_gate = use_utility_gate
+        self.fusion_type = fusion_type
         self.beta = nn.Parameter(torch.tensor(float(beta_init)))
         self.q = nn.Conv2d(C, C, 1)
         self.k = nn.Conv2d(C, C, 1)
@@ -43,6 +45,15 @@ class UtilityGatedFusion(nn.Module):
             F_star : (C, H, W)          fused ego-frame feature
         """
         N, C, H, W = F_recv.shape
+        if self.fusion_type == "max":
+            # CoCa3D / CoBEVT: non-parametric point-wise maximum over the ego and every
+            # transmitted collaborator cell. Untransmitted cells must not participate, so they
+            # are pushed to -inf before the max and the ego feature is the fallback.
+            neg_inf = torch.finfo(F_recv.dtype).min
+            masked = torch.where(mask.unsqueeze(1) >= 0.5, F_recv,
+                                 torch.full_like(F_recv, neg_inf))
+            stacked = torch.cat([F_ego.unsqueeze(0), masked], dim=0)        # (N+1, C, H, W)
+            return stacked.max(dim=0).values
         # queries from ego (1, C, H, W), keys/values from collaborators (N, C, H, W)
         q = self.q(F_ego.unsqueeze(0))                        # (1, C, H, W)
         k = self.k(F_recv)                                    # (N, C, H, W)

@@ -14,6 +14,7 @@ Per-cell utility:
 
 Four variants are provided for ablation A2:
     depth_aware      : ||F||_2 * exp(-alpha * D)         (ours, N1)
+    depth_entropy    : 1 - D                             (CoCa3D-style, sender-side)
     confidence_only  : sigmoid(conv(F))                  (Where2comm style)
     magnitude_only   : ||F||_2
     learned_fue      : relu(conv([F, D]))                (learned feature-utility)
@@ -75,6 +76,10 @@ class UtilityHead(nn.Module):
         elif self.utility_type == "learned_fue":
             cat = torch.cat([F_bev, D.unsqueeze(1)], dim=1)              # (N, C+1, H, W)
             U = torch.relu(self.fue_head(cat)).squeeze(1)
+        elif self.utility_type == "depth_entropy":
+            # CoCa3D-style: utility is the depth distribution's CONFIDENCE alone, with no
+            # feature-magnitude term. CoCa3D selects LOW entropy, so higher utility = lower D.
+            U = 1.0 - D
         elif self.utility_type == "depth_aware":
             # softplus(alpha) so alpha stays non-negative during training
             a = torch.nn.functional.softplus(self.alpha)
