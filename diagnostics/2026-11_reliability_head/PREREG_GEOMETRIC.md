@@ -183,3 +183,43 @@ On both checkpoints, restricted to pairs where **G2p and `+z` disagree** about w
   G2 should not be presented as the latter.
 
 No other analysis decides this.
+
+## RESULT: **FAIL** -- G2p does not beat `+z` on both checkpoints
+
+Win rate with ties = 0.5, frame-bootstrap 95% CI.
+
+| | disagreement rate | ties among those | **G2p (disagree only)** | `+z` (disagree only) |
+|---|---|---|---|---|
+| no_fusion ep100 | 0.281 | **0.658** | **0.5085 [0.4997, 0.5183]** | 0.4915 |
+| arm-B ep20 | 0.308 | 0.464 | **0.6553 [0.6486, 0.6617]** | 0.3447 |
+
+All-pairs context: ep100 G2p 0.6768 vs `+z` 0.6720 (nearly identical); arm-B G2p 0.6967 vs
+`+z` 0.6010.
+
+**On no_fusion ep100, G2p adds essentially nothing over the inverted range prior.** Where the two
+disagree, G2p is at chance. The CI lower bound misses the threshold by 0.0003, so "indistinguishable
+from chance" is a fairer description than "worse than chance" -- but the rule was fixed in advance
+precisely to stop that distinction being used as a rescue, and it is not used as one here.
+
+**On arm-B ep20 it clearly does beat `+z`** (0.655 vs 0.345). That inconsistency is itself the
+finding: whatever G2p carries beyond `+z` is checkpoint-dependent.
+
+A plausible mechanism, stated as a hypothesis and not tested: ep100 (120 epochs, linear bins) has a
+severe under-prediction bias at range -- argmax/true ratio 0.17-0.39 -- so "larger prediction wins"
+is nearly sufficient and leaves little for geometry to add. arm-B (20 epochs, inverse-frequency
+reweighting) has a milder bias (0.31-0.57), and there G2p contributes. If that is right, G2's
+apparent strength on ep100 was largely the bias.
+
+**Technical caveat on the ep100 number:** 65.8% of its disagreement pairs are ties. Scored at 0.5
+that mechanically compresses the achievable range to about [0.33, 0.67]. Backing the ties out,
+G2p wins roughly 0.525 of actual ep100 decisions -- still chance.
+
+## Decision
+
+**Stop.** Per the amendment, the honest framing of G2 on this evidence is bias exploitation, not
+geometric reliability, and it must not be presented as the latter. Step 2 (wiring G2 into the
+utility) is NOT started.
+
+What would actually settle it: a model whose depth bias runs the other way, where `+z` would invert
+while a genuinely geometric signal would not. No such checkpoint exists here, and running further
+variants until one passes would be exactly the p-hacking this pre-registration exists to prevent.
