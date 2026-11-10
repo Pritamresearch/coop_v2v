@@ -60,3 +60,59 @@ Val frames **disjoint from the 200 already used** for the learned-head test (whi
   the fixed byte budget.
 
 All queued jobs stay as they are either way.
+
+---
+
+# RESULT (2026-11-10, after the pre-registration above): **PASS for G2; G1 passes but is negligible**
+
+347,033 agent pairs (206,394 ties dropped) from 120 val frames disjoint from the learned-head set.
+Frozen `no_fusion_lidardepth` epoch-100 encoder.
+
+## Primary (pre-registered rule: CI lower bound > 0.5 AND above entropy)
+
+| score | win rate | 95% CI (frame bootstrap) | verdict |
+|---|---|---|---|
+| **G2 (−\|pred − ground\|)** | 0.744 | [0.720, 0.768] | **PASS** |
+| G1 (−sender range) | 0.513 | [0.507, 0.519] | PASS, but negligible |
+| G2signed (secondary) | 0.568 | [0.561, 0.576] | reported only |
+| entropy (baseline) | **0.415** | [0.407, 0.423] | below chance |
+
+## Confound check: is G2 just measuring the road?
+
+Most LiDAR-labelled pixels are road surface, where flat-ground depth ≈ true depth, which would make
+G2 a readout of the error rather than a prediction of it — and useless for vehicles. Splitting the
+same pairs by height above the plane:
+
+| score | ALL | GROUND-LIKE (<1 m) | **ELEVATED (>2 m, vehicles)** |
+|---|---|---|---|
+| G2 (LiDAR ground) | 0.759 | 0.867 | **0.791** [0.755, 0.821] |
+| **G2p (POSE ground)** | **0.799** | 0.878 | **0.820** [0.800, 0.840] |
+| G1 | 0.514 | 0.495 (chance) | 0.540 |
+| entropy | 0.413 | 0.388 | 0.405 |
+
+**The confound does not materialise**: G2 holds at 0.79–0.82 on elevated pixels. G1's entire effect
+comes from elevated pixels (0.540 vs 0.495), and is too small to use either way.
+
+## Deployability: the ground plane must not come from LiDAR
+
+The first measurement estimated the plane from each agent's own LiDAR points, which a camera-only
+system does not have at inference. **G2p** uses only the sensor height from pose/calibration against
+a flat world — and scores *higher* (0.820 vs 0.791 on vehicles), probably because a low-percentile
+estimate from whatever the LiDAR happened to hit is noisier than the flat-world assumption.
+
+## Why this differs from the failures
+
+- It **fits nothing** — no bias map, no training, no model-specific parameters — so unlike the
+  learned head it cannot be a map of where this particular model fails.
+- It is a **geometric consistency check**: a prediction beyond what the ground plane permits is
+  suspect however confident the network is. That is precisely the measured failure mode, where the
+  model is confidently wrong.
+
+## Not yet established
+
+1. The Spearman-vs-`magnitude_only` gate (< 0.977) — requires wiring it into the utility.
+2. Tie rate is 37% of raw pairs; where those concentrate is not characterised.
+3. Measured on ONE checkpoint. It should hold on the arm-B checkpoint too; a signal that only works
+   for one model would be a bias map in disguise.
+4. The flat-world assumption suits these CARLA towns. Real-world or hilly data would need a genuine
+   ground-plane estimate, and this result should not be assumed to transfer.
