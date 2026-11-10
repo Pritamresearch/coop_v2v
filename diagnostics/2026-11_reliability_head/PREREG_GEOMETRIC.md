@@ -116,3 +116,40 @@ estimate from whatever the LiDAR happened to hit is noisier than the flat-world 
    for one model would be a bias map in disguise.
 4. The flat-world assumption suits these CARLA towns. Real-world or hilly data would need a genuine
    ground-plane estimate, and this result should not be assumed to transfer.
+
+---
+
+# STEP 1 (2026-11-10): replication, ties, and the RANGE-PRIOR baseline
+
+The range prior is the baseline the literature demands. CoCam4D (arXiv 2610.11577) weights
+observations by an analytic `sigma_z^2 ~ z^4/f^2` -- reliability as a monotone function of predicted
+depth alone. A positional prior already beat our learned head, so G2 has to beat a range prior.
+
+Win rate, ties counted as 0.5 / ties dropped, 553,427 pairs, 120 frames:
+
+| score | no_fusion ep100 | arm-B ep20 (replication) |
+|---|---|---|
+| **G2p (pose ground)** | 0.677 / **0.782** | 0.697 / **0.773** |
+| G2 (LiDAR ground) | 0.653 / 0.744 | 0.672 / 0.738 |
+| **range prior −z** | 0.329 / **0.228** | 0.400 / **0.361** |
+| range prior −z² | 0.329 / 0.228 | 0.400 / 0.361 |
+| G1 (−sender range) | 0.508 / 0.513 | 0.506 / 0.509 |
+| entropy | 0.447 / 0.415 | 0.499 / 0.498 |
+
+**Replicates:** G2p is 0.782 and 0.773 on two independently trained checkpoints, so it is not
+checkpoint-specific and cannot be a bias map in disguise.
+
+**The range prior is beaten decisively, and is itself BELOW chance (0.23-0.36).** Preferring the
+agent with the shorter predicted depth is actively wrong here, because this model *under*-predicts
+depth at range: a short prediction is often the badly-wrong one. Head-to-head, G2p and the range
+prior disagree on 66-68% of pairs, and on those G2p is right **85%** (ep100) and **79%** (arm-B)
+of the time. G2 is not a range prior in disguise -- flat-ground depth depends on pixel row and
+camera pitch, so two pixels at the same predicted depth can score very differently.
+
+**Ties:** 37.3% (ep100) and 28.0% (arm-B), i.e. decision coverage 62.7% / 72.0%. Scored at 0.5 they
+pull G2p to 0.677 / 0.697, still far above chance.
+
+**Ties are NOT the above-horizon artefact.** Pixels whose ray never meets the ground have an
+undefined flat-ground depth, but they are only 4.5-4.7% of pairs and are *less* common among tied
+pairs (2.5%) than untied ones (6.0%). No tied pair has both errors exactly zero. Ties are simply
+both agents landing in the same depth bin, which 128-bin quantisation makes common.
