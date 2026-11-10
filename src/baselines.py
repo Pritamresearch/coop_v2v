@@ -40,6 +40,18 @@ def make(name: str, base: Config) -> Config:
                        utility_type="magnitude_only",
                        use_utility_gate=False, receiver_centric=False,
                        k=1, use_encoder=True)
+    if name == "ours_nodepth":
+        # "No depth term" ablation: identical to ours_full except the sender utility drops
+        # exp(-alpha*D) and becomes ||F|| alone. The receiver need is unchanged -- and since D is
+        # ~0 in 97% of covered cells and exactly 1 in uncovered ones (measured 2026-11-10), that
+        # need is in practice a COVERAGE map, not a depth-uncertainty map. So this preset is
+        # "magnitude utility + coverage need". See scripts/check_need_uncovered.py, which gates
+        # that reading, and diagnostics/.../bev-depth-entropy-degenerate notes.
+        return replace(base, exp_name="ours_nodepth",
+                       no_fusion=False, dense_transmit=False,
+                       utility_type="magnitude_only",
+                       use_utility_gate=True, receiver_centric=True,
+                       k=2, use_encoder=True)
     if name == "ours_full":
         return replace(base, exp_name="ours_full",
                        no_fusion=False, dense_transmit=False,
@@ -49,4 +61,4 @@ def make(name: str, base: Config) -> Config:
     raise ValueError(f"unknown baseline preset: {name}")
 
 
-ALL = ["no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam", "ours_full"]
+ALL = ["no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam", "ours_full", "ours_nodepth"]

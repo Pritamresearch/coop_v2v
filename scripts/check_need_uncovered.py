@@ -72,8 +72,23 @@ def measure(cfg, backbone, ds, idxs, uncertainty_fn=depth_uncertainty):
             {b: np.concatenate(v) for b, v in bands.items() if v}, float(np.mean(frac_cov)))
 
 
+def _auroc(score, pos):
+    pos = pos.astype(bool)
+    if pos.all() or not pos.any():
+        return float("nan")
+    r = np.argsort(np.argsort(score)) + 1.0
+    n1, n0 = pos.sum(), (~pos).sum()
+    return float((r[pos].sum() - n1 * (n1 + 1) / 2) / (n1 * n0))
+
+
 def report(tag, u, c, bands, fc, thresh=0.95, verbose=True):
     ok = len(u) > 0 and float(np.median(u)) >= thresh and float(np.mean(u >= thresh)) >= 0.99
+    # Is `need` in practice a COVERAGE indicator rather than a depth-uncertainty map? The
+    # "ours_nodepth" preset is labelled "magnitude utility + coverage need" on the strength of this.
+    score = np.concatenate([u, c])
+    is_unc = np.concatenate([np.ones(len(u), bool), np.zeros(len(c), bool)])
+    auroc_cov = _auroc(score, is_unc)
+    frac_cov_low = float(np.mean(c < 0.01))
     if verbose:
         print(f"  [{tag}] mean covered fraction of the grid: {fc:.3f}")
         print(f"    UNCOVERED cells (n={len(u):8d}): need median {np.median(u):.4f}  mean {u.mean():.4f}  "
@@ -82,6 +97,8 @@ def report(tag, u, c, bands, fc, thresh=0.95, verbose=True):
               f"p05 {np.quantile(c, 0.05):.4f}")
         for b, v in bands.items():
             print(f"      covered {b[0]:>4}-{b[1]:<5} m (n={len(v):7d}): need median {np.median(v):.4f}  mean {v.mean():.4f}")
+        print(f"    need as a COVERAGE indicator: AUROC {auroc_cov:.4f}  "
+              f"(covered cells with need<0.01: {frac_cov_low:.4f})")
         print(f"    {'PASS' if ok else 'FAIL'}: uncovered cells {'do' if ok else 'DO NOT'} request help "
               f"(need >= {thresh})")
     return ok
