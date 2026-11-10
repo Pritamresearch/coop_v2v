@@ -153,3 +153,33 @@ pull G2p to 0.677 / 0.697, still far above chance.
 undefined flat-ground depth, but they are only 4.5-4.7% of pairs and are *less* common among tied
 pairs (2.5%) than untied ones (6.0%). No tied pair has both errors exactly zero. Ties are simply
 both agents landing in the same depth bin, which 128-bin quantisation makes common.
+
+---
+
+# AMENDMENT 2026-11-10 09:29:12 UTC: is G2 just exploiting an under-prediction bias?
+
+**Committed before this test was run.** Step 1 showed the range prior `-z` at 0.228 (ep100) and
+0.361 (arm-B) on non-tied pairs. A score and its negation partition the same decisions, so the
+INVERTED prior `+z` -- "trust the agent predicting the LARGER depth" -- necessarily wins about
+0.772 and 0.639. The ep100 figure is close to G2p's 0.782.
+
+If G2p is largely agreeing with `+z`, then G2 is not measuring geometric consistency at all: it is
+exploiting the fact that THIS model under-predicts depth, so "larger prediction = more reliable"
+happens to hold. That would be bias exploitation, would not transfer to a model with a different
+bias, and would not support the framing.
+
+## Test
+
+On both checkpoints, restricted to pairs where **G2p and `+z` disagree** about which agent to pick:
+
+- win rate of G2p, with **ties scored 0.5**,
+- 95% CI bootstrapped over frames,
+- the disagreement rate itself reported.
+
+**PASS: the lower bound of G2p's win rate is > 0.5 on BOTH checkpoints.**
+
+- PASS -> proceed to step 2, and add `+z` as a named baseline in the paper alongside `-z`.
+- FAIL -> **stop**. The honest framing would be bias exploitation, not geometric reliability, and
+  G2 should not be presented as the latter.
+
+No other analysis decides this.
