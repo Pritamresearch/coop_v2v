@@ -175,7 +175,7 @@ class CoopDetector(nn.Module):
         N = F_all.shape[0]
 
         # 2) Per-agent utility + depth uncertainty
-        U_all, D_all = self.utility(F_all, depth_logits)     # (N, H, W), (N, H, W)
+        U_all, D_all = self.utility(F_all, depth_logits, extra.get("ent_bev"))
         # If no fusion baseline: ego-only. Send zero bytes.
         if cfg.no_fusion or N == 1:
             F_star = F_all[0]

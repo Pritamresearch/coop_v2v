@@ -14,7 +14,8 @@ Per-cell utility:
 
 Four variants are provided for ablation A2:
     depth_aware      : ||F||_2 * exp(-alpha * D)         (ours, N1)
-    depth_entropy    : 1 - D                             (CoCa3D-style, sender-side)
+    depth_entropy    : 1 - D, D from the SPLATTED histogram (degenerate; see notes)
+    img_depth_entropy: 1 - D, D from IMAGE-space entropy  (CoCa3D-faithful)
     confidence_only  : sigmoid(conv(F))                  (Where2comm style)
     magnitude_only   : ||F||_2
     learned_fue      : relu(conv([F, D]))                (learned feature-utility)
@@ -57,7 +58,8 @@ class UtilityHead(nn.Module):
             nn.Conv2d(C // 4, 1, 1),
         )
 
-    def forward(self, F_bev: torch.Tensor, depth_logits: torch.Tensor):
+    def forward(self, F_bev: torch.Tensor, depth_logits: torch.Tensor,
+                ent_bev: torch.Tensor = None):
         """
         F_bev        : (N, C, H, W)
         depth_logits : (N, K, H, W)
@@ -66,7 +68,12 @@ class UtilityHead(nn.Module):
             D : (N, H, W)  depth uncertainty (always returned so downstream
                            modules can use it for logging / evaluation)
         """
-        D = depth_uncertainty(depth_logits)
+        if self.utility_type == "img_depth_entropy":
+            # CoCa3D-faithful: uncertainty measured in IMAGE space, then carried into BEV.
+            assert ent_bev is not None, "img_depth_entropy needs ent_bev from the backbone"
+            D = ent_bev
+        else:
+            D = depth_uncertainty(depth_logits)
         mag = F_bev.norm(dim=1)                              # (N, H, W)
 
         if self.utility_type == "magnitude_only":
@@ -76,7 +83,7 @@ class UtilityHead(nn.Module):
         elif self.utility_type == "learned_fue":
             cat = torch.cat([F_bev, D.unsqueeze(1)], dim=1)              # (N, C+1, H, W)
             U = torch.relu(self.fue_head(cat)).squeeze(1)
-        elif self.utility_type == "depth_entropy":
+        elif self.utility_type in ("depth_entropy", "img_depth_entropy"):
             # CoCa3D-style: utility is the depth distribution's CONFIDENCE alone, with no
             # feature-magnitude term. CoCa3D selects LOW entropy, so higher utility = lower D.
             U = 1.0 - D

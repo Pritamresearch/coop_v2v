@@ -97,6 +97,8 @@ class Config:
     # ---- depth bins / depth loss (defaults reproduce the original runs) ----
     depth_bins:        str = "linear"  # "linear" | "log" (frustum points and LiDAR label edges together)
     depth_loss_weight: str = "none"    # "none" | "inv_sqrt_freq" (weight each label by 1/sqrt(bin frequency))
+    lr_warmup_epochs:  int = 5         # linear LR warmup length, in ABSOLUTE epochs; rescale
+                                      # proportionally when the total budget changes
     max_epoch:         int = -1        # stop after this epoch index (-1: run to `epochs`; LR schedule unchanged)
     save_every:        int = 20        # also keep epoch_<N>.pth every N epochs (besides last.pth / best.pth)
 
@@ -162,7 +164,8 @@ class Config:
     def validate(self) -> None:
         assert self.feat_C % 2 == 0, "feat_C must be even for 4-bit packing"
         assert self.utility_type in {
-            "depth_aware", "confidence_only", "magnitude_only", "learned_fue"
+            "depth_aware", "confidence_only", "magnitude_only", "learned_fue",
+            "depth_entropy", "img_depth_entropy"
         }
         assert self.selection_relax in {"true_topk", "sigmoid"}
         assert self.backbone in {"lss"}        # standin removed; always use real LSS

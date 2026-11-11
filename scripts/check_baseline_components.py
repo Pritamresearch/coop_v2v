@@ -113,6 +113,41 @@ def gate_depth_entropy(verbose=True):
     return ok
 
 
+def gate_img_entropy(scenes, verbose=True):
+    """The CoCa3D arm must use IMAGE-space entropy, not the degenerate splatted-histogram entropy.
+
+    Calls the production backbone and UtilityHead -- no re-derivation. Checks, against the
+    independently measured image-space statistics (median ~0.57, p5 ~0.11, p95 ~0.90):
+      * covered cells are NOT degenerate (the BEV-histogram version has D < 0.01 in 97% of them),
+      * uncovered cells are exactly 1.0 (maximum entropy), so an unseen cell is never "confident",
+      * the median over covered cells is in a plausible band around the image-space median.
+    """
+    cfg = replace(make("coca3d_cam", Config()), device="cpu")
+    meds, frac_low, unc_ok = [], [], []
+    for sc in scenes:
+        torch.manual_seed(0)
+        m = CoopDetector(cfg).eval()
+        with torch.no_grad():
+            F_all, depth_logits, extra = m.backbone(sc)
+            U, D = m.utility(F_all, depth_logits, extra.get("ent_bev"))   # production path
+        ego = D[0]
+        unc = ego >= 1.0 - 1e-6
+        cov = ~unc
+        if cov.sum() < 100:
+            continue
+        meds.append(float(ego[cov].median()))
+        frac_low.append(float((ego[cov] < 0.01).float().mean()))
+        unc_ok.append(bool(torch.allclose(ego[unc], torch.ones_like(ego[unc]))) if unc.any() else True)
+        assert torch.allclose(U, 1.0 - D, atol=1e-6), "img_depth_entropy must be U = 1 - D"
+    med, low = float(np.mean(meds)), float(np.mean(frac_low))
+    ok = bool(low < 0.25 and 0.2 < med < 0.95 and all(unc_ok))
+    if verbose:
+        print(f"  {OK if ok else BAD}  img entropy: median over covered cells {med:.3f} "
+              f"(image-space reference ~0.57), degenerate fraction (<0.01) {low:.3f} "
+              f"(BEV-histogram version: 0.97), uncovered == 1.0 {all(unc_ok)}")
+    return ok
+
+
 def gate_bytes(scenes, verbose=True):
     """soft_B and bytes_kb_from_out must agree, include control bytes, and scale with senders."""
     cfg = replace(make("ours_full", Config()), device="cpu")
@@ -144,7 +179,8 @@ def main():
     scenes = _scenes(replace(Config(), device="cpu"), a.frames)
     print(f"real data: {len(scenes)} multi-agent val frames\n[real code]")
     real = {"need_source": gate_need_source(scenes), "max fusion": gate_max_fusion(),
-            "depth_entropy": gate_depth_entropy(), "bytes": gate_bytes(scenes)}
+            "depth_entropy": gate_depth_entropy(), "img_entropy": gate_img_entropy(scenes),
+            "bytes": gate_bytes(scenes)}
 
     # ---------------- negative controls: each must FAIL ----------------
     print("\n[negative controls -- each gate must FAIL on broken code]")
@@ -184,7 +220,20 @@ def main():
     broken["need_source"] = gate_need_source(scenes, verbose=False)
     CoopDetector._request_map = _orig_req
 
-    for k in ("need_source", "depth_entropy", "max fusion", "bytes"):
+    # img entropy: break it so the arm falls back to the DEGENERATE splatted-histogram entropy --
+    # exactly the strawman this implementation exists to avoid. Patch the production path.
+    import src.models.lss_backbone as _LB
+    _orig_bb = _LB.LSSBackbone.forward
+    def _bad_bb(self, scene):
+        F_out, dl, extra = _orig_bb(self, scene)
+        from src.models.depth_aware_utility import depth_uncertainty
+        extra["ent_bev"] = depth_uncertainty(dl)        # BEV-histogram entropy, the degenerate one
+        return F_out, dl, extra
+    _LB.LSSBackbone.forward = _bad_bb
+    broken["img_entropy"] = gate_img_entropy(scenes, verbose=False)
+    _LB.LSSBackbone.forward = _orig_bb
+
+    for k in ("need_source", "depth_entropy", "img_entropy", "max fusion", "bytes"):
         print(f"  broken {k:>14}: {'correctly FAILS' if not broken[k] else 'STILL PASSES -- gate is useless'}")
 
     all_ok = all(real.values()) and not any(broken.values())

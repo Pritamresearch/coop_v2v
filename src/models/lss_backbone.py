@@ -373,7 +373,23 @@ class LSSBackbone(nn.Module):
                              cfg.grid_H, cfg.grid_W)            # (K, H, W)
         depth_bev = depth_bev / (depth_bev.sum(0, keepdim=True) + 1e-6)
 
-        return F_agent, depth_bev, depth_logits_img
+        # ---- image-space depth entropy, probability-weighted into BEV ----
+        # CoCa3D measures depth uncertainty per IMAGE pixel, over the K-bin distribution. Taking the
+        # entropy of the SPLATTED histogram instead is degenerate: geometry fixes which bin reaches a
+        # given BEV cell, so that histogram is concentrated by construction (D < 0.01 in 97% of
+        # covered cells, measured 2026-11-10). Here the entropy is computed in image space first and
+        # only then carried into BEV, as a probability-weighted mean over the rays reaching each cell.
+        ent_img = -(depth_prob * (depth_prob + 1e-9).log()).sum(1) / math.log(K_t)   # (n_cams,fH,fW)
+        ent_rays = (ent_img.unsqueeze(1).expand(n_cams_t, K_t, fH_t, fW_t)
+                    .reshape(M, 1))                               # per (pixel, bin) sample
+        w = prob_flat.unsqueeze(-1)                               # weight = that sample's probability
+        num = bev_pool((w * ent_rays)[valid_flat], rc_flat[valid_flat], cfg.grid_H, cfg.grid_W)
+        den = bev_pool(w[valid_flat],               rc_flat[valid_flat], cfg.grid_H, cfg.grid_W)
+        covered = den[0] > 1e-6
+        ent_bev = torch.where(covered, num[0] / den[0].clamp(min=1e-6),
+                              torch.ones_like(num[0]))            # uncovered -> max entropy (1.0)
+
+        return F_agent, depth_bev, depth_logits_img, ent_bev
 
     def forward(self, scene: dict):
         images     = scene["images"]
@@ -384,22 +400,24 @@ class LSSBackbone(nn.Module):
         post_trans = scene.get("post_trans")
 
         N = images.shape[0]
-        F_list, depth_list, dimg_list = [], [], []
+        F_list, depth_list, dimg_list, ent_list = [], [], [], []
 
         for i in range(N):
             pr = post_rots[i]  if post_rots  is not None else None
             pt = post_trans[i] if post_trans is not None else None
-            Fi, Di, dimg = self._forward_agent(
+            Fi, Di, dimg, Ei = self._forward_agent(
                 images[i], intrins[i], rots[i], trans[i], pr, pt,
                 depth_scale=float(scene.get("depth_scale", 1.0)),
             )
             F_list.append(Fi)
             depth_list.append(Di)
             dimg_list.append(dimg)
+            ent_list.append(Ei)
 
         F_out            = torch.stack(F_list,     dim=0)
         depth_bev        = torch.stack(depth_list, dim=0)
         depth_logits_bev = torch.log(depth_bev + 1e-9)
         depth_img        = torch.stack(dimg_list,  dim=0)
 
-        return F_out, depth_logits_bev, {"depth_img": depth_img}
+        return F_out, depth_logits_bev, {"depth_img": depth_img,
+                                          "ent_bev": torch.stack(ent_list, dim=0)}

@@ -40,6 +40,16 @@ def make(name: str, base: Config) -> Config:
                        utility_type="magnitude_only",
                        use_utility_gate=False, receiver_centric=False,
                        k=1, use_encoder=True)
+    if name == "coca3d_cam":
+        # CoCa3D-style, as their paper defines it: SENDER-side utility from IMAGE-space depth
+        # entropy (not the degenerate splatted-histogram entropy), a swept THRESHOLD rather than a
+        # byte budget, and non-parametric point-wise MAX fusion (they argue against attention).
+        return replace(base, exp_name="coca3d_cam",
+                       no_fusion=False, dense_transmit=False,
+                       utility_type="img_depth_entropy",
+                       use_utility_gate=False, receiver_centric=False,
+                       selection_mode="threshold", fusion_type="max",
+                       k=1, use_encoder=True)
     if name == "ours_nodepth":
         # "No depth term" ablation: identical to ours_full except the sender utility drops
         # exp(-alpha*D) and becomes ||F|| alone. The receiver need is unchanged -- and since D is
@@ -61,4 +71,4 @@ def make(name: str, base: Config) -> Config:
     raise ValueError(f"unknown baseline preset: {name}")
 
 
-ALL = ["no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam", "ours_full", "ours_nodepth"]
+ALL = ["no_fusion", "dense", "where2comm_cam", "jigsawcomm_cam", "ours_full", "ours_nodepth", "coca3d_cam"]
