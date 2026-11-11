@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=1-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ab_imgaug_rot180.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ab_imgaug_rot180.err
+#SBATCH --output=logs/slurm_%j_ab_imgaug_rot180.out
+#SBATCH --error=logs/slurm_%j_ab_imgaug_rot180.err
 #
 # Image-augmentation A/B, BEVDet geometric image aug + BEV flip/scale, rotation kept at +-180 deg.
 # Ego-only, depth arm B (inv_sqrt_freq), same seed and 120-epoch LR schedule as the baseline
@@ -17,17 +17,8 @@
 #   j=$(sbatch --parsable slurm/ab_imgaug_rot180.sh)
 #   sbatch --dependency=afterany:$j slurm/ab_imgaug_rot180.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ab_imgaug_rot180 at $(date) on $(hostname) ======"
 # Gates: all three must pass with the augmentation this arm uses, or we do not train.
 python -u -m src.data.img_augment || { echo 'GATE FAILED: image-aug post_rot/post_tran'; exit 1; }

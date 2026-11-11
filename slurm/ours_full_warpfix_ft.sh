@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_warpfix_ft.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_warpfix_ft.err
+#SBATCH --output=logs/slurm_%j_ours_full_warpfix_ft.out
+#SBATCH --error=logs/slurm_%j_ours_full_warpfix_ft.err
 #
 # Quick check of the warp fix (commit a624570): fine-tune ours_full_lidardepth from its epoch-20 checkpoint for 4 epochs
 # (21-24) with the FIXED augmentation, checkpoint every epoch. Same settings and LR schedule as the original run.
@@ -15,20 +15,11 @@
 #   j=$(sbatch --parsable slurm/ours_full_warpfix_ft.sh)
 #   sbatch --dependency=afterany:$j slurm/ours_full_warpfix_ft.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ours_full_warpfix_ft at $(date) on $(hostname) ======"
 CK=results/checkpoints/ours_full_warpfix_ft; mkdir -p $CK
-[ -f $CK/last.pth ] || cp /mnt/scratch2/users/2641309/tmp_claude_diag/oursfull_ep20.pth $CK/last.pth   # start point: ours_full epoch 20
+[ -f $CK/last.pth ] || cp "${COOP_SEED_CKPT:-/mnt/scratch2/users/2641309/tmp_claude_diag/oursfull_ep20.pth}" $CK/last.pth   # start point: ours_full epoch 20
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation
 python -u scripts/check_collab_warp.py --frames 8 || { echo 'collaborator warp check FAILED -- not training'; exit 1; }
 python -u -c "

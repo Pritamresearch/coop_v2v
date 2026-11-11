@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_nodepth_warpfix_armb.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_nodepth_warpfix_armb.err
+#SBATCH --output=logs/slurm_%j_ours_nodepth_warpfix_armb.out
+#SBATCH --error=logs/slurm_%j_ours_nodepth_warpfix_armb.err
 #
 # 'NO DEPTH TERM' ABLATION: ours_nodepth (sender utility = ||F||, no exp(-alpha*D)) with the
 # collaborator warp fix (a624570) + depth A/B arm B. Deliberately labelled as an ablation: the
@@ -20,17 +20,8 @@
 #   j=$(sbatch --parsable slurm/ours_nodepth_warpfix_armb.sh)
 #   sbatch --dependency=afterany:$j slurm/ours_nodepth_warpfix_armb.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ours_nodepth_warpfix_armb at $(date) on $(hostname) ======"
 python -u scripts/check_need_uncovered.py --frames 4 || { echo 'GATE FAILED: need/coverage'; exit 1; }
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation

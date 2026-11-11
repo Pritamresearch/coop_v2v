@@ -10,3 +10,6 @@ __pycache__/
 # backups of edited source files
 *.bak*
 *.current_*
+
+# local dataset symlink / copy (see README)
+data/

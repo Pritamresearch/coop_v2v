@@ -5,16 +5,11 @@
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=32G
 #SBATCH --time=04:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/overfit_%j.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/overfit_%j.err
+#SBATCH --output=logs/overfit_%j.out
+#SBATCH --error=logs/overfit_%j.err
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 export PYTHONDONTWRITEBYTECODE=1
 export PYTHONPATH=$PROJECT:$PYTHONPATH
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

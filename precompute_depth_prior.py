@@ -29,11 +29,12 @@ import numpy as np
 import torch
 from PIL import Image
 
-DATA_ROOTS = {
-    "train": "/mnt/scratch2/users/2641309/datasets/OPV2V/DATA_train/train_chunks/train",
-    "val":   "/mnt/scratch2/users/2641309/datasets/OPV2V/DATA_validate/validate_chunks/validate",
-    "test":  "/mnt/scratch2/users/2641309/datasets/OPV2V/DATA_test/test_chunks/test",
-}
+# Paths come from src/config.py, which reads OPV2V_ROOT (see that file).
+import sys as _sys, os as _os
+_sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+from src.config import TRAIN_DIR, VAL_DIR, TEST_DIR
+
+DATA_ROOTS = {"train": TRAIN_DIR, "val": VAL_DIR, "test": TEST_DIR}
 N_CAMS = 4
 
 

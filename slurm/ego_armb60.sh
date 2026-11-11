@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ego_armb60.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ego_armb60.err
+#SBATCH --output=logs/slurm_%j_ego_armb60.out
+#SBATCH --error=logs/slurm_%j_ego_armb60.err
 #
 # Matched ego-only baseline for ours_nodepth60: arm B depth (inv_sqrt_freq), FRESH start,
 # 60-epoch budget with every absolute-epoch schedule rescaled identically. Same seed.
@@ -15,17 +15,8 @@
 #   j=$(sbatch --parsable slurm/ego_armb60.sh)
 #   sbatch --dependency=afterany:$j slurm/ego_armb60.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ego_armb60 at $(date) on $(hostname) ======"
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation
 python -u -c "

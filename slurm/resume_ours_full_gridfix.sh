@@ -6,18 +6,11 @@
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
 #SBATCH --dependency=afterany:10387364
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_gridfix_resume.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_gridfix_resume.err
+#SBATCH --output=logs/slurm_%j_ours_full_gridfix_resume.out
+#SBATCH --error=logs/slurm_%j_ours_full_gridfix_resume.err
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ours_full_gridfix: RESUME from last.pth, at $(date) ======"
 python -u -c "
 from dataclasses import replace

@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_warpfix_armb.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_warpfix_armb.err
+#SBATCH --output=logs/slurm_%j_ours_full_warpfix_armb.out
+#SBATCH --error=logs/slurm_%j_ours_full_warpfix_armb.err
 #
 # FINAL RETRAIN: ours_full with the collaborator warp fix (a624570) + depth A/B arm B
 # (depth_loss_weight='inv_sqrt_freq': ~2x far-range depth mass near truth at epoch 20).
@@ -16,17 +16,8 @@
 #   j=$(sbatch --parsable slurm/ours_full_warpfix_armb.sh)
 #   sbatch --dependency=afterany:$j slurm/ours_full_warpfix_armb.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ours_full_warpfix_armb at $(date) on $(hostname) ======"
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation
 python -u scripts/check_collab_warp.py --frames 8 || { echo 'collaborator warp check FAILED -- not training'; exit 1; }

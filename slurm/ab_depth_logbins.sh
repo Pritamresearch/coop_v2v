@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=2-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ab_depth_logbins.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ab_depth_logbins.err
+#SBATCH --output=logs/slurm_%j_ab_depth_logbins.out
+#SBATCH --error=logs/slurm_%j_ab_depth_logbins.err
 #
 # Far-range depth A/B, arm A: log-spaced depth bins.
 # Otherwise identical to slurm/no_fusion_lidardepth.sh (the baseline): same seed and 120-epoch LR
@@ -18,17 +18,8 @@
 #   j=$(sbatch --parsable slurm/ab_depth_logbins.sh)
 #   sbatch --dependency=afterany:$j slurm/ab_depth_logbins.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ab_depth_logbins at $(date) on $(hostname) ======"
 python -u -c "
 import os

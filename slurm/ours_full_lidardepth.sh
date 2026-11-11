@@ -5,8 +5,8 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_lidardepth.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_ours_full_lidardepth.err
+#SBATCH --output=logs/slurm_%j_ours_full_lidardepth.out
+#SBATCH --error=logs/slurm_%j_ours_full_lidardepth.err
 #
 # ours_full (full cooperative model) trained with LiDAR depth supervision + CenterNet heatmap loss.
 # Resumes automatically from results/checkpoints/ours_full_lidardepth/last.pth
@@ -14,17 +14,8 @@
 #   j=$(sbatch --parsable slurm/ours_full_lidardepth.sh)
 #   sbatch --dependency=afterany:$j slurm/ours_full_lidardepth.sh
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-conda activate coop_v2v
-
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== ours_full_lidardepth at $(date) on $(hostname) ======"
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation
 python -u scripts/check_collab_warp.py --frames 8 || { echo 'collaborator warp check FAILED -- not training'; exit 1; }

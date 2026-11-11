@@ -5,21 +5,11 @@
 #SBATCH --cpus-per-task=8
 #SBATCH --mem=64G
 #SBATCH --time=3-00:00:00
-#SBATCH --output=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_train.out
-#SBATCH --error=/mnt/scratch2/users/2641309/projects/coop_v2v/logs/slurm_%j_train.err
+#SBATCH --output=logs/slurm_%j_train.out
+#SBATCH --error=logs/slurm_%j_train.err
 
-PROJECT=/mnt/scratch2/users/2641309/projects/coop_v2v
-cd $PROJECT
-mkdir -p logs
-
-flight env activate conda@opencood
-
-# Initialize conda for non-interactive Slurm jobs
-source ~/.local/share/flight/env/conda+opencood/etc/profile.d/conda.sh
-
-conda activate coop_v2v
-export PYTHONPATH=$PROJECT:$PYTHONPATH
-
+# All machine-specific settings (repo root, conda, dataset root) live in slurm/_env.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/_env.sh"
 echo "====== Training all baselines at $(date) ======"
 #python run_baselines.py 2>&1 | tee logs/baselines_${SLURM_JOB_ID}.log
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

@@ -10,15 +10,23 @@ import os
 from dataclasses import dataclass, asdict
 
 # ------------------------------------------------------------------ #
-# Kelvin2 paths — real OPV2V data                                     #
+# Paths. Set by environment variable so the code is portable: nothing  #
+# here needs editing to move the project to another machine.           #
+#                                                                      #
+#   OPV2V_ROOT    -- the OPV2V dataset root (contains DATA_train/ ...)  #
+#   COOP_RESULTS  -- where checkpoints, logs and curves are written     #
+#                                                                      #
+# Defaults are repo-relative, so a fresh clone runs without any         #
+# environment at all once the dataset sits in ./data/OPV2V (or a        #
+# symlink points there).                                               #
 # ------------------------------------------------------------------ #
-_SCRATCH = "/mnt/scratch2/users/2641309"
-_OPV2V   = f"{_SCRATCH}/datasets/OPV2V"
+_REPO  = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_OPV2V = os.environ.get("OPV2V_ROOT", os.path.join(_REPO, "data", "OPV2V"))
 
-TRAIN_DIR    = f"{_OPV2V}/DATA_train/train_chunks/train"
-VAL_DIR      = f"{_OPV2V}/DATA_validate/validate_chunks/validate"
-TEST_DIR     = f"{_OPV2V}/DATA_test/test_chunks/test"
-RESULTS_ROOT = f"{_SCRATCH}/projects/coop_v2v/results"
+TRAIN_DIR    = os.path.join(_OPV2V, "DATA_train", "train_chunks", "train")
+VAL_DIR      = os.path.join(_OPV2V, "DATA_validate", "validate_chunks", "validate")
+TEST_DIR     = os.path.join(_OPV2V, "DATA_test", "test_chunks", "test")
+RESULTS_ROOT = os.environ.get("COOP_RESULTS", os.path.join(_REPO, "results"))
 
 
 @dataclass
