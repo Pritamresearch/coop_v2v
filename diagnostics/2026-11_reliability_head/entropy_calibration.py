@@ -39,7 +39,7 @@ E, ERR_AM, ERR_EX, TRUE = [], [], [], []
 with torch.no_grad():
     for i in np.linspace(0, len(ds) - 1, n_frames).astype(int):
         s = _to_device(opv2v_collate([ds[int(i)]]), torch.device("cpu"))
-        _, _, depth_img = backbone._forward_agent(
+        _, _, depth_img, _ = backbone._forward_agent(
             s["images"][0], s["intrins"][0], s["rots"][0], s["trans"][0], None, None)
         lab = s["depth_gt_img"][0]                      # (n_cams, fH, fW) bin index, -1 = no label
         m = lab >= 0

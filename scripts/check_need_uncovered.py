@@ -47,7 +47,8 @@ def measure(cfg, backbone, ds, idxs, uncertainty_fn=depth_uncertainty):
             img = scene["images"][0]
             pr = scene["post_rots"][0] if scene.get("post_rots") is not None else None
             pt = scene["post_trans"][0] if scene.get("post_trans") is not None else None
-            _, depth_bev, _ = backbone._forward_agent(
+            # _forward_agent returns (F_agent, depth_bev, depth_logits_img, ent_bev)
+            _, depth_bev, _, _ = backbone._forward_agent(
                 img, scene["intrins"][0], scene["rots"][0], scene["trans"][0], pr, pt,
                 depth_scale=float(scene.get("depth_scale", 1.0)))
             need = uncertainty_fn(torch.log(depth_bev + 1e-9).unsqueeze(0))[0]   # (H, W)
