@@ -161,3 +161,18 @@ H1 and H2 in `PREREG_COOPERATION.md`; the schedule in the original section above
 (epochs=120, max_epoch=59, gumbel_epochs=60, warmup_epochs=20, lr_warmup_epochs=5);
 the held-out test protocol; the requirement that the final round not launch until the
 image-augmentation readout has decided the augmentation configuration.
+
+## A1.3 Clarification — how the floor is to be read (2026-11-16T14:56:16Z)
+
+The registered value 0.013 is unchanged. It is a **broken-run detector**, not a quality
+bar: below it, the training regime was not reproduced and the round is void. It is set
+two sample sd below the reference mean precisely so that a run statistically identical
+to the reference cannot trip it.
+
+**Quality is judged against the reference band, mean ~0.026** (reference epochs 50-58:
+0.027, 0.021, 0.020, 0.027, 0.036). A final ego-only run that clears 0.013 but sits far
+below 0.026 has not failed the void check and must not be reported as sound on that
+basis — it is a run whose regime reproduced badly, and the gap is reported as such.
+
+So the two numbers answer different questions: 0.013 asks "did this round run at all?",
+and the reference band asks "did it run as well as the regime it was copied from?".

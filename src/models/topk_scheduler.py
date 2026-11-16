@@ -151,15 +151,29 @@ def hard_topk(U: torch.Tensor, k: int, budget_cells: int, tau: float = 0.0) -> t
     if tau > 0.0:
         M = M * (U > tau).float()
 
-    # greedy budget: rank cells by their kept-utility mass and keep the top ones
+    # greedy budget: keep EXACTLY the n_keep highest-utility cells.
+    #
+    # This previously thresholded on the n_keep-th largest value:
+    #     thresh = cell_util.topk(k=n_keep).values.min()
+    #     cell_mask = (cell_util >= thresh)
+    # which keeps every cell TIED with the threshold, so the budget was advisory. It
+    # failed hardest exactly where it mattered: utility is ~0 on most covered cells
+    # (BEV depth entropy is degenerate below 0.01 in 97% of them), so when fewer than
+    # n_keep cells have non-zero utility the n_keep-th largest IS zero and
+    # `cell_util >= 0` is true for the whole grid -- the full map was transmitted while
+    # the accounting still reported a budgeted send.
+    #
+    # Selecting by index instead makes the count exact. argsort(stable=True) on the
+    # negated utility breaks ties by ascending cell index, so the choice is deterministic
+    # and reproducible rather than dependent on topk's tie order.
     cell_util = (U * M).sum(dim=0).flatten()         # (H*W,)
     n_total = H * W
     n_keep = max(0, min(budget_cells, n_total))
     if n_keep < n_total:
-        # zero out low-utility cells (those below the n_keep-th highest)
         if n_keep == 0:
             return torch.zeros_like(U)
-        thresh = cell_util.topk(k=n_keep).values.min()
-        cell_mask = (cell_util >= thresh).float().view(1, H, W)
-        M = M * cell_mask
+        order = torch.argsort(-cell_util, stable=True)        # ties -> ascending index
+        cell_mask = torch.zeros_like(cell_util)
+        cell_mask[order[:n_keep]] = 1.0
+        M = M * cell_mask.view(1, H, W)
     return M
