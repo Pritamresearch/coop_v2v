@@ -125,14 +125,14 @@ with torch.no_grad():
                                      "true": cell_of(g[k, :2]), "warped": cellw})
             for ang in ANGLES:
                 for variant in ("code", "fixed_yaw"):
-                    r2, t2, rel2, b2 = bev_rotate_scene(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=FixedAngle(ang))
+                    r2, t2, rel2, b2, _s2 = bev_rotate_scene(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=FixedAngle(ang))
                     if variant == "fixed_yaw": rel2[:, 2] = rel[:, 2]           # rotate translation only
                     res = []
                     for (p, cellw), (k, j, pc, dist) in zip(lift_warp(pairs, r2, t2, intr, rel2), truth):
                         res.append({"j": j, "dist": dist, "true": cell_of(b2[k, :2]), "warped": cellw})
                     warp[f"{variant}_{int(ang)}"] = res
             # ego control under augmentation: ego-visible vehicles, ego camera, no warp
-            r2, t2, rel2, b2 = bev_rotate_scene(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=FixedAngle(90.0))
+            r2, t2, rel2, b2, _s2 = bev_rotate_scene(rots.copy(), trans.copy(), rel.copy(), g.copy(), rng=FixedAngle(90.0))
             rel2[0] = 0.0                       # ego row is masked out of fusion in the model; control = lift only
             ctl = []
             for k in range(len(g)):

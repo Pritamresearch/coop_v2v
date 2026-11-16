@@ -51,7 +51,8 @@ def bev_rotate_scene(
 ) -> tuple:
     """
     Rotate the entire scene around the ego origin by a random angle.
-    Returns rotated (rots, trans, rel_pose, gt_boxes).
+    Returns rotated (rots, trans, rel_pose, gt_boxes, scale) -- five values: `scale`
+    is needed because a true scene scale must also scale the frustum depths.
 
     The rotation is applied to:
     - Camera extrinsics (rots, trans): camera origins and orientations in ego frame

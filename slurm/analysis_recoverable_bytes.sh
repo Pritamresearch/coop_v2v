@@ -27,13 +27,18 @@ OUT=${COOP_DIAG:-/mnt/scratch2/users/2641309/tmp_claude_diag}
 R=${COOP_RESULTS:-$(pwd)/results}
 mkdir -p "$OUT"
 echo "====== recoverable shard ${SLURM_ARRAY_TASK_ID} at $(date) on $(hostname) ======"
+# Propagate failures. Without this the job reports COMPLETED with exit 0 when the
+# python step crashes, because the trailing echo succeeds -- which is how five
+# shards silently died on a stale bev_rotate_scene unpack.
+rc=0
 python -u scripts/fusion_checks.py "${SLURM_ARRAY_TASK_ID}" 6 300 \
     "$R/checkpoints/ours_nodepth60/last.pth" \
     "$R/checkpoints/ego_armb60/last.pth" \
-    "$OUT/fc60_shard${SLURM_ARRAY_TASK_ID}.pkl" 150
+    "$OUT/fc60_shard${SLURM_ARRAY_TASK_ID}.pkl" 150 || rc=$?
 
 if [ "${SLURM_ARRAY_TASK_ID}" = "0" ]; then
     python -u scripts/measure_bytes.py --run ours_nodepth60 --frames 200 \
-        --out "$OUT/bytes_ours_nodepth60.json"
+        --out "$OUT/bytes_ours_nodepth60.json" || rc=$?
 fi
-echo "====== Done at $(date) ======"
+echo "====== Done at $(date), rc=$rc ======"
+exit $rc

@@ -135,22 +135,45 @@ def ap_of(frames_lists, sel):
 
 
 rs = np.random.default_rng(0); B = 1000; nF = len(F)
-L = {k: per_frame_c2m(*k) for k in [("full", "far", "rec"), ("full", "far", "nonrec"), ("ego", "far", "rec"), ("full_b1_nogate", "far", "rec")]}
-boot = {k: [] for k in L}; d_rec_nonrec, d_rec_ego = [], []
+L = {k: per_frame_c2m(*k) for k in [("full", "far", "rec"), ("full", "far", "nonrec"),
+                                    ("ego", "far", "rec"), ("ego", "far", "nonrec"),
+                                    ("full_b1_nogate", "far", "rec")]}
+boot = {k: [] for k in L}; d_rec_nonrec, d_rec_ego, d_nonrec_ego, d_did = [], [], [], []
 for _ in range(B):
     sel = rs.integers(0, nF, nF)
     a = {k: ap_of(v, sel) for k, v in L.items()}
     for k in L: boot[k].append(a[k])
-    d_rec_nonrec.append(a[("full", "far", "rec")] - a[("full", "far", "nonrec")]); d_rec_ego.append(a[("full", "far", "rec")] - a[("ego", "far", "rec")])
+    d_rec_nonrec.append(a[("full", "far", "rec")] - a[("full", "far", "nonrec")])
+    g_rec    = a[("full", "far", "rec")]    - a[("ego", "far", "rec")]
+    g_nonrec = a[("full", "far", "nonrec")] - a[("ego", "far", "nonrec")]
+    d_rec_ego.append(g_rec); d_nonrec_ego.append(g_nonrec)
+    # SPECIFICITY: the cooperative gain must be LARGER where collaborators can actually
+    # see the vehicle. full_rec - full_nonrec does not test this -- recoverable vehicles
+    # may simply be easier for both models -- so difference the two gains.
+    d_did.append(g_rec - g_nonrec)
 ci = lambda x: (float(np.percentile(x, 2.5)), float(np.percentile(x, 97.5)))
 print("\n    bootstrap 95% CI over frames (centre AP@2m):")
 for k in L: print(f"      {k[0]:15s} far&{k[2]:6s}: {ap_of(L[k], range(nF)):.4f}  CI [{ci(boot[k])[0]:.4f}, {ci(boot[k])[1]:.4f}]")
 print(f"      full: recoverable - not recoverable : CI [{ci(d_rec_nonrec)[0]:+.4f}, {ci(d_rec_nonrec)[1]:+.4f}]")
 print(f"      recoverable: full - ego (same frames): CI [{ci(d_rec_ego)[0]:+.4f}, {ci(d_rec_ego)[1]:+.4f}]")
+print(f"      NOT recoverable: full - ego          : CI [{ci(d_nonrec_ego)[0]:+.4f}, {ci(d_nonrec_ego)[1]:+.4f}]")
+print(f"      SPECIFICITY (gain_rec - gain_nonrec) : CI [{ci(d_did)[0]:+.4f}, {ci(d_did)[1]:+.4f}]")
+
+# ---- PRE-REGISTERED 2026-11-16 (diagnostics/2026-11_cooperation/PREREG_COOPERATION.md) ----
+P_primary = ci(d_rec_ego)[0] > 0                 # ours > ego on far-recoverable, CI excludes 0
+P_specific = ci(d_did)[0] > 0                    # that gain exceeds the far-not-recoverable gain
+print(f"\n    PRE-REGISTERED 2026-11-16  primary (far-recoverable, ours>ego): {'MET' if P_primary else 'NOT MET'}"
+      f";  specificity (gain_rec > gain_nonrec): {'MET' if P_specific else 'NOT MET'}"
+      f"  ->  {'PASS' if P_primary and P_specific else 'FAIL'}")
+print("    (the 2026-11-05 criterion below is SUPERSEDED: full_rec - full_nonrec is not a\n     cooperation test, and its 0.012 threshold came from an epoch-20 ego-only run)")
 crit1 = ci(d_rec_nonrec)[0] > 0; crit2 = ci(boot[("full", "far", "rec")])[0] > 0.012
 print(f"    SUCCESS CRITERION (fixed 2026-11-05): recoverable > not-recoverable: {'MET' if crit1 else 'NOT MET'};  "
       f"recoverable > 0.012 (ego-only, epoch 20): {'MET' if crit2 else 'NOT MET'}  ->  {'PASS' if crit1 and crit2 else 'FAIL'}")
 R["bootstrap"] = {"|".join(k): ci(v) for k, v in boot.items()} | {"diff_rec_minus_nonrec": ci(d_rec_nonrec), "diff_rec_full_minus_ego": ci(d_rec_ego),
+                                                                  "diff_nonrec_full_minus_ego": ci(d_nonrec_ego),
+                                                                  "specificity_gain_rec_minus_gain_nonrec": ci(d_did),
+                                                                  "prereg_2026_11_16_primary": bool(ci(d_rec_ego)[0] > 0),
+                                                                  "prereg_2026_11_16_specificity": bool(ci(d_did)[0] > 0),
                                                                   "criterion_pass": bool(crit1 and crit2)}
 
 cells = {v: np.mean([fr["dets"][v][2] for fr in F]) for v in ("full", "full_b1_nogate")}
