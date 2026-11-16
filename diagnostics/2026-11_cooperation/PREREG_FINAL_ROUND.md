@@ -176,3 +176,64 @@ basis — it is a run whose regime reproduced badly, and the gap is reported as 
 
 So the two numbers answer different questions: 0.013 asks "did this round run at all?",
 and the reference band asks "did it run as well as the regime it was copied from?".
+
+---
+
+# AMENDMENT 2 — cooperative methods train under the cell budget
+
+**Written 2026-11-16T17:29:12Z (UTC). Git HEAD at writing: `49543add337043efba157c963447c031280fc619`.**
+**Not launched.** The final round still waits on the augmentation decision, which the
+epoch-20 readout has now made: no image augmentation.
+
+## The mismatch this fixes
+
+Measured on real frames (`scripts/check_train_mask.py`): the training path applies
+top-k over the AGENT axis only. The cell budget lives solely in `hard_topk`, which runs
+only at `hard=True`. So training transmits `k*H*W` pairs — every cell, for its top-k
+agents — against an inference budget of `n_keep*k`:
+
+| frame | agents | train sum(M) | vs n_keep*k = 52428 | eval sum(M) |
+|---|---|---|---|---|
+| 0 | 5 | 131072 | 2.50x | 52428 (1.00x) |
+| 395 | 2 | 65536 | 1.25x | 26214 (0.50x) |
+
+The forward mask is already straight-through (fraction of entries neither 0 nor 1:
+0.000000), so features do NOT leak in at fractional weights. The problem is the missing
+budget, not a soft mask.
+
+## Registered
+
+Every cooperative method in the final round — ego and `dense` excepted, the first
+because it transmits nothing and the second because transmitting everything is its
+definition — trains with the cell budget enforced in the forward pass:
+
+- `train_budget=True`: exactly `n_keep` cells forward, gradient through a
+  temperature-sigmoid of each cell's margin to the cut, so cells just inside and just
+  outside the budget both receive signal.
+- `train_budget_range=(0.1, 0.6)`: `budget_frac` sampled per iteration from the range
+  we report, so **one model per method yields the whole rate-accuracy curve** instead of
+  one model per operating point.
+- Ties broken by ascending cell index, as in the inference path.
+
+## Gate
+
+`scripts/check_train_budget.py`, on real `ours_nodepth60` val frames:
+
+    budget_frac=0.1   n_keep= 6553  cells sent  6553- 6553  non-binary 0.000000  EXACT
+    budget_frac=0.25  n_keep=16384  cells sent 16384-16384  non-binary 0.000000  EXACT
+    budget_frac=0.4   n_keep=26214  cells sent 26214-26214  non-binary 0.000000  EXACT
+    budget_frac=0.6   n_keep=39321  cells sent 39321-39321  non-binary 0.000000  EXACT
+    gradients: 92 parameters receive non-zero gradient
+
+Negative control, the current no-budget path: 65536 cells sent regardless of the
+requested fraction — MISMATCH at every fraction, as required.
+
+## Note for the write-up
+
+`ours_nodepth60` was trained WITHOUT the budget and evaluated WITH it. H1 and H2 are
+therefore tested under a train/test mismatch that disadvantages the cooperative arm: the
+model never saw the sparsity it is scored at. The passing H1 result is a lower bound in
+that respect, and the final round removes the mismatch rather than inheriting it.
+
+This does not retroactively change H1/H2, which are decided on the checkpoints as they
+exist under `PREREG_COOPERATION.md` Amendment 2.
