@@ -226,10 +226,17 @@ class CoopDetector(nn.Module):
                                        tau=(tau if tau is not None else cfg.tau))
         else:
             k_eff = min(cfg.k, N - 1) if N > 1 else 1
-            if cfg.selection_relax == "true_topk":
-                M_others = sched.gumbel_topk_soft(U_r_others, k=k_eff, T=gumbel_T)
-            else:
+            if cfg.selection_relax != "true_topk":
                 M_others = sched.gumbel_sigmoid(U_r_others, tau=cfg.tau, T=gumbel_T)
+            elif getattr(cfg, "train_budget", False):
+                # Train under the same cell budget inference enforces. budget_frac is
+                # passed per iteration so one model spans the reported rate range.
+                bf = budget_frac if budget_frac is not None else cfg.budget_frac
+                M_others = sched.budget_topk_st(
+                    U_r_others, k=k_eff,
+                    budget_cells=int(bf * cfg.grid_H * cfg.grid_W), T=gumbel_T)
+            else:
+                M_others = sched.gumbel_topk_soft(U_r_others, k=k_eff, T=gumbel_T)
 
         # Full mask (ego row = 0: ego does not transmit to itself)
         M = torch.zeros_like(U_r)

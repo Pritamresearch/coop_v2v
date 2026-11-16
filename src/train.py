@@ -200,7 +200,11 @@ def train(cfg: Config, train_loader=None, val_loader=None, test_loader=None):
                           leave=True)):
             scene = _to_device(scene, device)
             with autocast(enabled=False):
-                out  = model(scene, hard=False, gumbel_T=T)
+                # Per-iteration budget sampling: one model covers the reported rate range
+                _r = tuple(getattr(cfg, "train_budget_range", ()) or ())
+                _bf = (float(np.random.uniform(_r[0], _r[1]))
+                       if (getattr(cfg, "train_budget", False) and len(_r) == 2) else None)
+                out  = model(scene, hard=False, gumbel_T=T, budget_frac=_bf)
                 loss, parts = coop_loss(out, scene, cfg, lam=lam)
             if not torch.isfinite(loss):
                 continue

@@ -119,6 +119,37 @@ def gumbel_topk_soft(U: torch.Tensor, k: int, T: float) -> torch.Tensor:
     return hard + (soft * k - (soft * k).detach())
 
 
+def budget_topk_st(U: torch.Tensor, k: int, budget_cells: int, T: float) -> torch.Tensor:
+    """Training-time selection WITH the cell budget enforced, straight-through.
+
+    gumbel_topk_soft alone caps agents per cell but not cells per frame, so training
+    transmits k*H*W pairs while inference is capped at n_keep*k. This closes that gap:
+
+        forward  : exactly n_keep cells (hard), ties broken by ascending cell index
+        backward : gradient through a temperature-sigmoid of the margin to the cut,
+                   so cells just inside and just outside the budget both receive signal
+
+    U : (N, H, W)   returns M : (N, H, W), binary forward, differentiable backward.
+    """
+    M = gumbel_topk_soft(U, k=k, T=T)                 # agent axis, already straight-through
+    N, H, W = U.shape
+    n_total = H * W
+    n_keep = max(0, min(int(budget_cells), n_total))
+    if n_keep >= n_total:
+        return M
+    if n_keep == 0:
+        return torch.zeros_like(M)
+
+    cell_util = (U * M).sum(dim=0).flatten()          # (H*W,)
+    order = torch.argsort(-cell_util.detach(), stable=True)
+    hard = torch.zeros_like(cell_util)
+    hard[order[:n_keep]] = 1.0
+    cut = cell_util.detach()[order[n_keep - 1]]       # utility of the last kept cell
+    soft = torch.sigmoid((cell_util - cut) / max(T, 1e-3))
+    cell_mask = hard + (soft - soft.detach())         # hard forward, soft backward
+    return M * cell_mask.view(1, H, W)
+
+
 def gumbel_sigmoid(U: torch.Tensor, tau: float, T: float) -> torch.Tensor:
     """
     Independent per-cell Gumbel-sigmoid gate. Does NOT strictly enforce

@@ -94,6 +94,12 @@ class Config:
     depth_source:  str   = "zoedepth"  # "zoedepth" | "lidar" (labels from .pcd; train split only) | "none"
     gumbel_T0:     float = 5.0
     gumbel_T1:     float = 0.5
+    train_budget:       bool  = False   # enforce the CELL budget during training too, via
+                                        # straight-through (final round: True for every
+                                        # cooperative method except dense)
+    train_budget_range: tuple = ()      # e.g. (0.1, 0.6): budget_frac sampled per iteration
+                                        # from this range, so one model covers the whole
+                                        # rate-accuracy curve. Empty = always cfg.budget_frac.
     gumbel_epochs: int   = -1          # anneal T0->T1 over this many epochs; -1 = cfg.epochs.
                                        # Needed when the LR cosine runs over a LONGER horizon than
                                        # training (epochs=120, max_epoch=59): without it selection
