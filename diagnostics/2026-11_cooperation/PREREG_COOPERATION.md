@@ -111,3 +111,59 @@ estimate of generalisation for any of these methods.
 split, run once, after every choice is frozen.** Nothing is tuned, selected or
 early-stopped on test. No test evaluation happens before the freeze: not for a sanity
 check, not for one method, not "just to see". Until then test stays untouched.
+
+---
+
+# AMENDMENT 2 — H1/H2 are decided on the fixed hard_topk
+
+**Written 2026-11-16T15:14:41Z (UTC). Git HEAD at writing: `a8382d5e0f00fad2c11908750c4412bdd5afbf3e`.**
+**No H1/H2 result exists yet:** at writing, `bands_nodepth60_vs_ego60.json` and
+`fc60_shard*.pkl` are absent; the jobs producing them are still running and no output
+of theirs has been read.
+
+## Why
+
+`hard_topk` enforced the byte budget with `cell_util >= thresh`, which keeps every
+cell tied at the cut. Where fewer than `n_keep` cells have non-zero utility the
+threshold is 0 and the whole grid is transmitted. Fixed in `a8382d5` (exact
+`n_keep` by stable argsort), gated with the old version as the negative control.
+
+**The two arms are NOT affected equally, and the asymmetry favours our own method.**
+Verified from the saved configs:
+
+| run | no_fusion | effect of the bug |
+|---|---|---|
+| `ego_armb60` | True | transmits nothing; `hard_topk` never runs. Unaffected. |
+| `ours_nodepth60` | False | cooperative; received MORE bandwidth than the budget allows. |
+
+So under the old code the cooperative arm was given extra information that the ego arm
+could not receive. **H1's gain measured that way is potentially inflated, not merely
+mislabelled on the byte axis.** An earlier note in this session claimed both arms were
+affected identically; that was wrong, and this amendment exists to correct it before any
+number is read.
+
+## What is registered
+
+1. **H1 and H2 are decided on evaluation with the fixed `hard_topk`.** The hypotheses,
+   definitions, metric, bands, bootstrap and decision table in the original
+   pre-registration are unchanged. This is a bug fix applied to the same checkpoints and
+   the same metric, not a new analysis or a second attempt at a result.
+2. **The old-code results are reported as superseded, not discarded.** They are published
+   alongside the corrected ones, with the measured bytes of each, so the size and
+   direction of the inflation are visible rather than quietly removed.
+3. **Nothing is re-trained.** Both checkpoints stay exactly as they are; only inference
+   changes. No training decision is revisited on the strength of this.
+4. **If the corrected H1 gain is smaller, that is the result.** The corrected numbers
+   govern the claim even if the superseded ones were more favourable.
+
+## Scope
+
+- Re-run with the fixed code: the recoverable-subset shards and the band comparison.
+  The band comparison is re-run whole rather than only its cooperative arm, so both
+  models are scored on the same frames in the same pass, as the pairing requires.
+- **The image-augmentation readout is unaffected.** All three of its arms
+  (`ab_depth_reweight`, `ab_imgaug_rot180`, `ab_imgaug_rot22`) have
+  `no_fusion=True` and transmit nothing, so `hard_topk` never executes. Its
+  pre-registered rule and its running job stand as they are.
+- The final round launches on the fixed code, so `PREREG_FINAL_ROUND.md` needs no
+  change on this account.
