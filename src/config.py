@@ -94,6 +94,10 @@ class Config:
     depth_source:  str   = "zoedepth"  # "zoedepth" | "lidar" (labels from .pcd; train split only) | "none"
     gumbel_T0:     float = 5.0
     gumbel_T1:     float = 0.5
+    gumbel_epochs: int   = -1          # anneal T0->T1 over this many epochs; -1 = cfg.epochs.
+                                       # Needed when the LR cosine runs over a LONGER horizon than
+                                       # training (epochs=120, max_epoch=59): without it selection
+                                       # stops at T=2.77 instead of reaching T1.
 
     # ---- heatmap target / loss (defaults reproduce the original runs) ----
     hm_norm:       str   = "sepnorm"   # "sepnorm": neg term / n_neg | "centernet": both terms / n_pos

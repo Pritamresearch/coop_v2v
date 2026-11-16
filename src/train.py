@@ -76,9 +76,17 @@ def lambda_schedule(epoch: int, cfg: Config) -> float:
 
 
 def gumbel_T(epoch: int, cfg: Config) -> float:
-    if cfg.epochs <= 1:
+    """Linear anneal T0 -> T1 over `gumbel_epochs` (default: cfg.epochs).
+
+    The anneal horizon is separate from cfg.epochs because the LR cosine may run over a
+    longer horizon than training actually does -- the final round uses epochs=120 for the
+    LR schedule but stops at max_epoch=59. Tying T to cfg.epochs there would end training
+    at T=2.77, so selection would never reach its final temperature.
+    """
+    n = cfg.gumbel_epochs if getattr(cfg, "gumbel_epochs", -1) > 0 else cfg.epochs
+    if n <= 1:
         return cfg.gumbel_T1
-    f = epoch / (cfg.epochs - 1)
+    f = min(max(epoch / (n - 1), 0.0), 1.0)
     return cfg.gumbel_T0 + f * (cfg.gumbel_T1 - cfg.gumbel_T0)
 
 
