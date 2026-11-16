@@ -144,17 +144,52 @@ class Config:
     budget_frac: float = 0.4
     tau:         float = 0.0
 
-    # ---- byte accounting (N5: honest — utility map included) ----
+    # ---- transmitted representation (defaults reproduce every run before 2026-11-16) ----
+    tx_channels:     int = -1     # 1x1-conv channel reduction before transmit; -1 = feat_C (no
+                                  # compression). The feature payload is 93.6% of the bytes, and
+                                  # it scales linearly with this.
+    tx_bits:         int = 4      # bits per transmitted channel (4, 8 or 16)
+    ctrl_downsample: int = 1      # control (utility/confidence) map stride; 1 = dense 256x256,
+                                  # which costs 64 KB per sender -- 2.6x a 25 KB frame budget
+                                  # on its own, before a single feature is sent.
+    ctrl_bits:       int = 8      # bits per control-map entry
+    budget_kb:       float = -1.0 # per-frame byte budget in KB; -1 = fall back to budget_frac.
+                                  # Budgets are anchored to V2X rates, not to grid fractions:
+                                  # 25 / 100 / 250 KB per frame is about 2 / 8 / 20 Mbps at 10 Hz.
+
+    # ---- byte accounting (N5: honest -- utility map included) ----
     b_idx:  int = 2
     b_util: int = 1
 
     @property
+    def tx_C(self) -> int:
+        return self.feat_C if self.tx_channels is None or self.tx_channels < 0 else self.tx_channels
+
+    @property
     def b_feat(self) -> int:
-        return self.feat_C // 2      # 4-bit packing: feat_C=256 → 128 bytes
+        """Bytes per transmitted cell for the feature vector."""
+        return -(-self.tx_C * self.tx_bits // 8)        # ceil division
 
     @property
     def per_cell_bytes(self) -> int:
-        return self.b_idx + self.b_feat + self.b_util   # 131 bytes at feat_C=256
+        return self.b_idx + self.b_feat + self.b_util
+
+    @property
+    def ctrl_bytes_per_sender(self) -> int:
+        """Bytes for one sender's dense control map, after downsampling and quantisation."""
+        d = max(1, int(self.ctrl_downsample))
+        cells = (self.grid_H // d) * (self.grid_W // d)
+        return -(-cells * self.ctrl_bits // 8)
+
+    def cells_for_budget(self, n_senders: int, k: int | None = None) -> int:
+        """Spatial cells affordable under budget_kb, after paying for control maps."""
+        if self.budget_kb is None or self.budget_kb < 0:
+            return int(self.budget_frac * self.grid_H * self.grid_W)
+        k = self.k if k is None else k
+        payload = self.budget_kb * 1024.0 - n_senders * self.ctrl_bytes_per_sender
+        if payload <= 0:
+            return 0
+        return max(0, int(payload / (self.per_cell_bytes * max(k, 1))))
 
     # ---- dataset: always OPV2V real data ----
     dataset:     str  = "opv2v"
