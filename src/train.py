@@ -335,8 +335,11 @@ def train(cfg: Config, train_loader=None, val_loader=None, test_loader=None):
 
         # Only keep last.pth + best.pth (per-epoch checkpoints removed to save disk)
         torch.save(ck_payload, last_ck)
-        # Periodic checkpoint every cfg.save_every epochs (default 20; for post-hoc evaluation)
-        if epoch > 0 and epoch % getattr(cfg, "save_every", 20) == 0:
+        # Periodic checkpoint every cfg.save_every epochs (default 20; for post-hoc evaluation),
+        # plus EVERY epoch from cfg.save_all_from on. The final round reports the mean +/- sd over
+        # the last five epochs rather than one final checkpoint, so each of those must be kept.
+        _sa = getattr(cfg, "save_all_from", -1)
+        if (epoch > 0 and epoch % getattr(cfg, "save_every", 20) == 0) or (_sa >= 0 and epoch >= _sa):
             torch.save(ck_payload, f"{ck_dir}/epoch_{epoch}.pth")
 
         # Save best checkpoint

@@ -113,6 +113,9 @@ class Config:
                                       # proportionally when the total budget changes
     max_epoch:         int = -1        # stop after this epoch index (-1: run to `epochs`; LR schedule unchanged)
     save_every:        int = 20        # also keep epoch_<N>.pth every N epochs (besides last.pth / best.pth)
+    save_all_from:     int = -1        # from this epoch on, keep EVERY epoch_<N>.pth (-1 = off).
+                                       # The final round reports mean +/- sd over epochs 55-59, so
+                                       # those five checkpoints must all survive.
 
     # ---- augmentation (defaults reproduce the runs before 2026-11-09) ----
     img_aug:        bool  = False      # BEVDet geometric image-view aug (resize/crop/flip/rotate)

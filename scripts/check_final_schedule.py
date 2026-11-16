@@ -23,8 +23,9 @@ from src.config import Config
 from src.train import lr_at_epoch, gumbel_T, lambda_schedule
 
 FINAL = dict(epochs=120, max_epoch=59, gumbel_epochs=60, warmup_epochs=20,
-             lr_warmup_epochs=5, save_every=10)
+             lr_warmup_epochs=5, save_every=10, save_all_from=55)
 LAST = 59
+REPORT = list(range(55, 60))      # the epochs whose checkpoints are averaged for reporting
 
 
 def trained_epochs(cfg):
@@ -41,6 +42,13 @@ def cosine(e, epochs, warm, base, eta=1e-6):
         return base * (e + 1) / max(warm, 1)
     p = min(max((e - warm) / max(1, epochs - warm), 0.0), 1.0)
     return eta + 0.5 * (base - eta) * (1 + math.cos(math.pi * p))
+
+
+def saved_epochs(cfg):
+    """Which epoch_<N>.pth files train() would write, by the production rule."""
+    sa = getattr(cfg, "save_all_from", -1)
+    return [e for e in trained_epochs(cfg)
+            if (e > 0 and e % getattr(cfg, "save_every", 20) == 0) or (sa >= 0 and e >= sa)]
 
 
 def run(cfg, label):
@@ -61,10 +69,13 @@ def run(cfg, label):
                                             and cfg.warmup_epochs < LAST)
     c["LR decreasing after warmup"] = all(b <= a + 1e-15 for a, b in zip(lrs[w:], lrs[w + 1:]))
     c["T decreasing"] = all(b <= a + 1e-12 for a, b in zip(Ts, Ts[1:]))
+    saved = saved_epochs(cfg)
+    c["epochs 55-59 all checkpointed"] = all(e in saved for e in REPORT)
 
     print(f"\n[{label}]  trained {len(eps)} epochs  "
           f"LR {lrs[0]:.2e} -> {lrs[-1]:.2e} ({lrs[-1]/cfg.lr:.1%} of base)  "
           f"T {Ts[0]:.2f} -> {Ts[-1]:.2f}  lambda on from epoch {cfg.warmup_epochs}")
+    print(f"   checkpoints kept: {saved_epochs(cfg)}")
     for k, v in c.items():
         print(f"   {'PASS' if v else 'FAIL'}  {k}")
     return all(c.values())
@@ -80,6 +91,7 @@ def main() -> int:
         "gumbel tied to cfg.epochs (gumbel_epochs=-1)": replace(good, gumbel_epochs=-1),
         "schedule compressed to 60 (the regime that cost accuracy)": replace(good, epochs=60, max_epoch=-1, gumbel_epochs=60),
         "lambda warmup past the final trained epoch": replace(good, warmup_epochs=80),
+        "save_all_from off -- the reporting window is not kept": replace(good, save_all_from=-1),
         "no early stop (trains all 120)": replace(good, max_epoch=-1),
     }
     bad = {}

@@ -85,3 +85,79 @@ used (40). It is scaled to the 60 trained epochs instead, giving 40 epochs of ba
 pressure rather than 20. This cannot affect the sanity floor, which is measured on the
 ego-only arm where lambda is inert, but it is a deliberate deviation from the reference
 regime and is recorded as one.
+
+---
+
+# AMENDMENT 1 — sanity floor and checkpoint reporting
+
+**Written 2026-11-16T14:51:08Z (UTC). Git HEAD at writing: `623b4618d1e93165c14f34c1af1070c735bf6e12`.**
+**Legitimate: no final-round run has been launched and no final-round result exists.**
+The original text above is left unedited; this section supersedes the two items named.
+
+## A1.1 Sanity floor: 0.013, not 0.025
+
+The original floor of 0.025 was wrong, and in the direction that matters: the
+reference run's own epochs 50-59 include 0.020 and 0.021, so a final run statistically
+identical to the reference could have been declared void.
+
+Recomputed from the reference log. **`val_every=2`, so epochs 50-59 contain only five
+distinct validation events** — the odd epochs are carried-forward duplicates, not
+measurements, and averaging all ten would understate the spread:
+
+| epoch | 50 | 52 | 54 | 56 | 58 |
+|---|---|---|---|---|---|
+| val AP50 | 0.027 | 0.021 | 0.020 | 0.027 | 0.036 |
+
+    mean = 0.0262    sd (sample, ddof=1) = 0.0064    sd (population) = 0.0057
+    mean - 2 sd = 0.0134 (sample)  /  0.0148 (population)
+
+**Registered floor: val AP50 >= 0.013** for the final ego-only run — mean minus two
+sample standard deviations, rounded down. The sample sd is used because five points is
+a small sample and it is the honest estimator of the underlying spread; rounding down
+errs toward not voiding a sound run.
+
+(The 0.0056 sd in the proposal matches the population sd exactly. The 0.017 figure
+implies a mean of 0.0282; the measured mean is 0.0262, which is why the floor lands at
+0.013 rather than 0.017.)
+
+**The void-round rule is unchanged.** Below 0.013 the regime was not reproduced, the
+round is void, the cause is investigated before anything is reported, and no number from
+a void round is quoted — including comparisons between methods inside it.
+
+## A1.2 Reporting: mean +/- sd over epochs 55-59, not one checkpoint
+
+Single-epoch AP is noisy at this LR. In the reference window the five distinct
+validations span 0.020 to 0.036 — a half-range of +/-0.008, matching the proposal's
+estimate. Reporting one final checkpoint would make every method's headline number a
+draw from that spread.
+
+**Registered rule, for every method:**
+
+- Train with `save_all_from=55`, so epochs 55, 56, 57, 58 and 59 are all checkpointed
+  (verified: the production save rule keeps 10, 20, 30, 40, 50, 55, 56, 57, 58, 59).
+- Report **mean +/- sd over those five checkpoints**, for validation and for the single
+  frozen test evaluation.
+- **This is not selection.** All five are reported; none is chosen. The window is fixed
+  in advance at the last five trained epochs and does not depend on any observed value.
+- Evaluating five checkpoints on test is still one test event: the five passes happen
+  together, after the freeze, with no choice made between them and no return visit. The
+  test rule (one evaluation, `COOP_TEST_FREEZE=1`) is unchanged.
+- The same code path computes val and test numbers, so the two are comparable.
+- sd is the sample sd over the five checkpoints, reported alongside every mean. Two
+  methods whose intervals overlap are not claimed to differ on that metric.
+
+`save_all_from` is new in `src/config.py`; the default `-1` preserves existing
+behaviour. `scripts/check_final_schedule.py` now asserts all five reporting epochs are
+checkpointed, with "save_all_from off" added as a fifth negative control. 8 checks pass,
+5 controls fail as required.
+
+Still to implement before launch: one evaluation script taking a checkpoint list and a
+split, so the val and test numbers come from the identical path. It will be gated before
+use, and the sanity floor above is checked on its validation output.
+
+## Unchanged by this amendment
+
+H1 and H2 in `PREREG_COOPERATION.md`; the schedule in the original section above
+(epochs=120, max_epoch=59, gumbel_epochs=60, warmup_epochs=20, lr_warmup_epochs=5);
+the held-out test protocol; the requirement that the final round not launch until the
+image-augmentation readout has decided the augmentation configuration.
