@@ -32,6 +32,13 @@ if [ -z "$_COOP_ENV" ]; then
 fi
 # shellcheck disable=SC1090
 source "$_COOP_ENV"
+# Fail loudly. Placed AFTER sourcing _env.sh so conda activation is not subject to -u.
+#   -e         stop at the first failing command
+#   -u         an unset variable is an error
+#   pipefail   `python ... | tee x.log` reports PYTHON's status, not tee's
+# Without pipefail a crashed python left the pipeline exit code at 0, so the job
+# reported COMPLETED and the trailing "Done" echo printed as if nothing was wrong.
+set -euo pipefail
 echo "====== ego_armb60 at $(date) on $(hostname) ======"
 # pre-training check: collaborator features must land on the right ego cells, with and without augmentation
 python -u -c "

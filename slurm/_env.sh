@@ -28,5 +28,5 @@ fi
 # this keeps jobs working even if that symlink is missing.
 export OPV2V_ROOT="${OPV2V_ROOT:-/mnt/scratch2/users/2641309/datasets/OPV2V}"
 
-export PYTHONPATH="$PROJECT:$PYTHONPATH"
+export PYTHONPATH="$PROJECT${PYTHONPATH:+:$PYTHONPATH}"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True

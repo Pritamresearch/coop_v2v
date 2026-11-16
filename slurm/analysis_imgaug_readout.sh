@@ -25,6 +25,13 @@ if [ -z "$_COOP_ENV" ]; then
 fi
 # shellcheck disable=SC1090
 source "$_COOP_ENV"
+# Fail loudly. Placed AFTER sourcing _env.sh so conda activation is not subject to -u.
+#   -e         stop at the first failing command
+#   -u         an unset variable is an error
+#   pipefail   `python ... | tee x.log` reports PYTHON's status, not tee's
+# Without pipefail a crashed python left the pipeline exit code at 0, so the job
+# reported COMPLETED and the trailing "Done" echo printed as if nothing was wrong.
+set -euo pipefail
 OUT=${COOP_DIAG:-/mnt/scratch2/users/2641309/tmp_claude_diag}
 echo "====== imgaug readout at $(date) on $(hostname) ======"
 python -u scripts/imgaug_readout.py --frames 200 --bootstrap 2000 --budget-min 145 \

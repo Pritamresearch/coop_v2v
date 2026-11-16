@@ -25,6 +25,13 @@ if [ -z "$_COOP_ENV" ]; then
 fi
 # shellcheck disable=SC1090
 source "$_COOP_ENV"
+# Fail loudly. Placed AFTER sourcing _env.sh so conda activation is not subject to -u.
+#   -e         stop at the first failing command
+#   -u         an unset variable is an error
+#   pipefail   `python ... | tee x.log` reports PYTHON's status, not tee's
+# Without pipefail a crashed python left the pipeline exit code at 0, so the job
+# reported COMPLETED and the trailing "Done" echo printed as if nothing was wrong.
+set -euo pipefail
 echo "====== separate pos/neg normalization (10 epochs) at $(date) ======"
 python -u quick_sepnorm_test.py 2>&1 | tee logs/sepnorm_test_${SLURM_JOB_ID}.log
 echo "====== Done at $(date) ======"

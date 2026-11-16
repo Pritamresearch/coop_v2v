@@ -14,10 +14,18 @@ vehicle appears at varied BEV locations across training.
 
 USAGE
 -----
-In OPV2VDataset.__getitem__, just before building the scene dict, call:
+In OPV2VDataset.__getitem__, just before building the scene dict (see the real call
+in src/data/opv2v.py). It takes four arrays and returns FIVE values:
 
     if self.augment:
-        scene_tensors = bev_rotate_scene(scene_tensors, max_angle_deg=180.0)
+        rots, trans, rel, boxes, scale = bev_rotate_scene(
+            rots, trans, rel, boxes, max_angle_deg=180.0,
+            flip=cfg.bev_flip, scale_range=cfg.bev_scale_range)
+
+`scale` must be applied to the frustum depths; ignoring it silently disables scaling.
+This block previously described a single-dict signature that has never existed in this
+version, and the docstring below claimed four return values -- which is how two call
+sites in scripts/fusion_checks.py came to unpack four and crash.
 
 Where scene_tensors is a dict with keys:
     rots      (N, n_cams, 3, 3)  cam->ego rotation
