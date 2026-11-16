@@ -167,3 +167,41 @@ number is read.
   pre-registered rule and its running job stand as they are.
 - The final round launches on the fixed code, so `PREREG_FINAL_ROUND.md` needs no
   change on this account.
+
+## A2.1 Measured outcome of the budget fix (2026-11-16T15:45:31Z)
+
+The inflation Amendment 2 was written to guard against **did not occur**. Measured on
+40 real `ours_nodepth60` val frames, running the pre-fix and fixed selections over the
+same frames through the full forward path:
+
+| | old (`>=` threshold) | fixed (exact `n_keep`) |
+|---|---|---|
+| kept spatial cells, mean / max | 26214 / 26214 | 26214 / 26214 |
+| frames over the 26214 budget | 0% | 0% |
+| charged bytes, mean / max | 6067.1 / 6963.1 KB | 6067.1 / 6963.1 KB |
+
+**Frames where the two differ: 0 of 40.**
+
+The tie pathology is real — the gate shows the old code keeping 4096 cells of a 1638
+budget when utilities are tied — but it needs cells sharing the threshold value
+*exactly*. The receiver-conditioned utility is a continuous float, so on real frames
+the threshold is unique and the old code already selected exactly `n_keep`. The
+degenerate-entropy finding was that utilities are *small*, not that they are *equal*;
+small distinct floats still order strictly.
+
+So the earlier worry in this session — that `ours_nodepth60` was evaluated at
+effectively dense transmission — was wrong. It was evaluated at its stated budget. The
+fix remains necessary (nothing guaranteed the tie-free property, and a different utility
+or a coarser dtype would break it), but it is a no-op on these results.
+
+**Amendment 2 is unchanged and still governs:** H1/H2 are decided on the fixed code, and
+the re-runs will confirm the equality end-to-end rather than inferring it from this
+40-frame check. The superseded results are expected to agree rather than to differ; if
+they do not, the discrepancy is reported.
+
+**Caveat on this diagnostic.** `measure_budget.py` reconstructs `cell_util` from the
+FINAL mask, after the budget has been applied, so its "threshold value", "cells tied at
+threshold" and "cells with utility > 0" columns describe the kept set, not the input to
+selection. They should not be read as characterising the pre-budget utility
+distribution. The 0-of-40 identity is end-to-end through the real implementations and
+does not depend on that reconstruction.
